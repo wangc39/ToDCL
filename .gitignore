@@ -1,0 +1,12 @@
+__pycache__
+data/convai2
+data/CornellMovie
+data/dailydialog
+data/empatheticdialogues
+data/Ubuntu
+data/wizard_of_wikipedia
+data/Taskmaster
+data/dstc8-schema-guided-dialogue
+data/multiwoz
+runs*
+.vscode
