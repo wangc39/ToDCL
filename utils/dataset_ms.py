@@ -366,7 +366,8 @@ class MSDataset(Dataset):
         if has_kg:
             kg_pad_ids, kg_pad_kn, kg_pad_kn_num = self.get_bg_pad(batch, "kg") # TODO: need to understand
             kg_pad_ids = kg_pad_ids.reshape(-1, kg_pad_kn) # [batch*kg_pad_kn_num, kg_pad_kn]
-            kg_memory_mask = torch.tensor(self.get_memory_mask(batch, "kg", kg_pad_kn_num), dtype=torch.float) # [batch, kg_pad_kn_num]
+            # kg_memory_mask = torch.tensor(self.get_memory_mask(batch, "kg", kg_pad_kn_num), dtype=torch.float) # [batch, kg_pad_kn_num]
+            kg_memory_mask = self.get_memory_mask(batch, "kg", kg_pad_kn_num).float().clone().detach().requires_grad_(True) # [batch, kg_pad_kn_num]
             kg_pad_kn_num = torch.tensor(kg_pad_kn_num, dtype=torch.long)
 
 

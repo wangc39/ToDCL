@@ -30,7 +30,12 @@ class Seq2SeqToD(pl.LightningModule):
                 model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
             tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
             # Add special tokens if they are not already added
-            self.add_special_tokens_(model, tokenizer)
+            orig_num_tokens = len(tokenizer.encoder)
+            num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN)  # returns 0 and doesn't add if they are already there
+            if num_added_tokens > 0:
+                model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+            
+            # model, tokenizer = self.add_special_tokens_(model, tokenizer)
             # model.resize_token_embeddings(new_num_tokens=len(tokenizer))
 
         self.model = model
@@ -47,15 +52,6 @@ class Seq2SeqToD(pl.LightningModule):
         self.reply_memory = []
         self.task_list_seen = []
 
-
-    def add_special_tokens_(self, model, tokenizer):
-        """ Add special tokens to the tokenizer and the model if they have not already been added. """
-        orig_num_tokens = len(tokenizer.encoder)
-        num_added_tokens = tokenizer.add_special_tokens(
-            ATTR_TO_SPECIAL_TOKEN)  # returns 0 and doesn't add if they are already there
-        if num_added_tokens > 0:
-            model.resize_token_embeddings(
-                new_num_tokens=orig_num_tokens + num_added_tokens)
 
     def set_number_of_tasks(self,n_tasks):
         self.n_tasks = n_tasks
@@ -190,18 +186,30 @@ class Seq2SeqToD(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+
+        input_ids, token_type_ids, labels, indexes, attention_masks_2d, \
+        kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
+        # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(self.device) for input_tensor in batch)
+
         if(self.CL == "ADAPTER"):
-            (loss), *_ = self.model(input_ids=batch["encoder_input"],
-                                attention_mask=batch["attention_mask"],
-                                labels=batch["decoder_output"],
+            (loss), *_ = self.model(input_ids=input_ids,
+                                attention_mask=attention_masks_2d,
+                                labels=labels,
                                 task_id=self.task_list_seen.index(batch["task_id"][0])
                                 )
         else:
-            print(batch["encoder_input"].size())
+            # print(input_ids.size())
+            print(f"input ids: {input_ids}, shape {input_ids.shape}")
+            print(f"token type ids: {token_type_ids}, shape: {token_type_ids.shape}")
+            print(f"lm labels: {labels}, shape: {labels.shape}")
+            print("---"*30)
+            # exit(1)
+            # print(batch["encoder_input"].size())
 
-            (loss), *_ = self.model(input_ids=batch["encoder_input"],
-                    attention_mask=batch["attention_mask"],
-                    labels=batch["decoder_output"]
+            (loss), *_ = self.model(input_ids=input_ids,
+                                attention_mask=attention_masks_2d,
+                                token_type_ids=token_type_ids,
+                                labels=labels,
                     )
         self.log('val_loss', loss)
         return loss
