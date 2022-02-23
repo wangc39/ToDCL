@@ -80,7 +80,8 @@ class MSDataset(Dataset):
         # print(f"self.cur_task: {self.cur_task}")
         instance = None
         self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
-        if self.cur_task == "convai2":
+        
+        if self.cur_task == "Convai2":
             # TODO: add speaker1 and speaker2 to one list
             # to get speaker1 and speaker2
             speaker1 = self.data[index]["speaker1"].copy() # four utterances shape: [[], [], [], []]
@@ -98,14 +99,14 @@ class MSDataset(Dataset):
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only last one candidate which is gold response
                 instance = self.proprecess_convai2(index, persona, history, candidate, self.tokenizer, task=self.cur_task)
 
-        elif self.cur_task == "daily":
+        elif self.cur_task == "Daily":
             topic = self.data[index]["topic"]
             for i, utterance in enumerate(self.data[index]["utterances"]):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_daily(index, topic, history, candidate, self.tokenizer, task=self.cur_task)
 
-        elif self.cur_task == "wow":
+        elif self.cur_task == "Wow":
             topic = self.data[index]["topic"]
             persona = self.data[index]["persona"] # one utterance
             for i, utterance in enumerate(self.data[index]["utterances"]):
@@ -113,7 +114,7 @@ class MSDataset(Dataset):
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_wow(index, topic, persona, history, candidate, self.tokenizer, task=self.cur_task)
 
-        elif self.cur_task == "ed":
+        elif self.cur_task == "Ed":
             context = self.data[index]["context"] # empathic word
             prompt = self.data[index]["prompt"] 
             for i, utterance in enumerate(self.data[index]["utterances"]):
@@ -121,7 +122,7 @@ class MSDataset(Dataset):
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_ed(index, context, prompt, history, candidate, self.tokenizer, task=self.cur_task)
 
-        elif self.cur_task == "ubuntu" or self.cur_task == "cornell": # ubuntu and cornell task is same
+        elif self.cur_task == "Ubuntu" or self.cur_task == "cornell": # ubuntu and cornell task is same
             for i, utterance in enumerate(self.data[index]["utterances"]):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence

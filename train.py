@@ -215,7 +215,7 @@ if __name__ == '__main__':
     #  options=["VANILLA"]
     parser.add_argument('--CL', type=str, default="MULTI")
     # options=[1,2,3,4,5]
-    parser.add_argument('--seed', default=1, type=int)
+    parser.add_argument('--seed', default=42, type=int)
 
 
     hyperparams = parser.parse_args()
