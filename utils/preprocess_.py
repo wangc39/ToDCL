@@ -9,6 +9,7 @@ import re
 from tabulate import tabulate
 from termcolor import colored
 from collections import defaultdict
+from data.preprocess_main import PreprocessMain
 
 def get_n_turns(data):
     len_dialogue = []
@@ -27,6 +28,45 @@ def print_sample(data,num):
 
 def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=False):
 
+    path = {
+        "cornell": {
+            "path": r"CornellMovie/cornell movie-dialogs corpus", 
+            "modeList": ["train", "valid", "test"],
+            "remake": False,
+        },
+        "ubuntu": {
+            "path": r"Ubuntu", 
+            "modeList": ["train", "valid", "test"],
+            "remake": True,
+        },
+        "convai2": {
+            "path": r"convai2", 
+            "modeList": ["train", "valid"],
+            "remake": False,
+        },
+        "daily": {
+            "path": r"dailydialog", 
+            "modeList": ["train", "valid", "test"],
+            "remake": False,
+        },
+        "ed": {
+            "path": r"empatheticdialogues/visible", 
+            "modeList": ["train", "valid", "test"],
+            # "remake": True,
+            "remake": False,
+
+        },
+        "wow": {
+            "path": r"wizard_of_wikipedia", 
+            "modeList": ["train", "valid_random_split", "test_random_split"],
+            "remake": False,
+        },
+    }
+    # generatePath = r"../data/multiSkill_dataset_v2/"
+    preprocessMain = PreprocessMain(path, generatePath)
+    # p.run()
+    # p.show_information()
+    
     table = []
     train = []
     dev = []
@@ -35,7 +75,9 @@ def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=Fal
 
     if ("Convai2" in dataset_list):
         print("LOAD Convai2")
-        train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
+        # train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
+        train_Convai2, dev_Convai2, test_Convai2 = preprocessMain.process_convai2(develop=develop)
+
         if(verbose):
             print_sample(train_Convai2,2)
             input()
@@ -50,14 +92,25 @@ def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=Fal
 
     if ("Ed" in dataset_list):
         print("LOAD ED")
-        train_Ed, dev_Ed, test_Ed = preprocessEd(develop=develop)
+        train_Ed, dev_Ed, test_Ed = preprocessMain.process_ed(develop=develop)
+
         n_turns = get_n_turns(train_Ed)
-        table.append({"Name":"TM19","Trn":len(train_Ed),"Val":len(dev_Ed),"Tst":len(test_Ed), "Tur":n_turns})
+        table.append({"Name":"Ed","Trn":len(train_Ed),"Val":len(dev_Ed),"Tst":len(test_Ed), "Tur":n_turns})
         train += train_Ed
         dev += dev_Ed
         test += test_Ed
         datasets.append({"Ed": {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}})
 
+    if ("Daily" in dataset_list):
+        print("LOAD Daily")
+        train_Daily, dev_Daily, test_Daily = preprocessMain.process_daily(develop=develop)
+
+        n_turns = get_n_turns(train_Ed)
+        table.append({"Name":"Daily","Trn":len(train_Daily),"Val":len(dev_Daily),"Tst":len(test_Daily), "Tur":n_turns})
+        train += train_Daily
+        dev += dev_Daily
+        test += test_Daily
+        datasets.append({"Daily": {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}})
 
 
     n_turns = get_n_turns(train)
