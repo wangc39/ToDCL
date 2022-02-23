@@ -21,14 +21,16 @@ def print_sample(data,num):
     color_map = {"USER":"blue","SYSTEM":"magenta","API":"red","API-OUT":"green"}
     for i_d, dial in enumerate(random.sample(data,len(data))):
         print(f'ID:{dial["id"]}')
-        print(f'Services:{dial["services"]}')
-        for turn in dial['dialogue']:
-            print(colored(f'{turn["spk"]}:',color_map[turn["spk"]])+f' {turn["utt"]}')
+        # print(f'Services:{dial["services"]}')
+        for idx, his in dial["utterances"][0]["history"]:
+            print(his)
+        for turn in dial['utterances']:
+            print(f'{turn["candidates"][0]}')
         if i_d == num: break
 
 def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=False):
 
-    path = {
+    taskConfig = {
         "cornell": {
             "path": r"CornellMovie/cornell movie-dialogs corpus", 
             "modeList": ["train", "valid", "test"],
@@ -52,7 +54,6 @@ def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=Fal
         "ed": {
             "path": r"empatheticdialogues/visible", 
             "modeList": ["train", "valid", "test"],
-            # "remake": True,
             "remake": False,
 
         },
@@ -62,10 +63,9 @@ def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=Fal
             "remake": False,
         },
     }
-    # generatePath = r"../data/multiSkill_dataset_v2/"
-    preprocessMain = PreprocessMain(path, generatePath)
-    # p.run()
-    # p.show_information()
+
+    preprocessMain = PreprocessMain(taskConfig)
+
     
     table = []
     train = []
@@ -112,6 +112,39 @@ def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=Fal
         test += test_Daily
         datasets.append({"Daily": {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}})
 
+    if ("Cornell" in dataset_list):
+        print("LOAD Cornell")
+        train_Cornell, dev_Cornell, test_Cornell = preprocessMain.process_cornell(develop=develop)
+
+        n_turns = get_n_turns(train_Cornell)
+        table.append({"Name":"Cornell","Trn":len(train_Cornell),"Val":len(dev_Cornell),"Tst":len(test_Cornell), "Tur":n_turns})
+        train += train_Cornell
+        dev += dev_Cornell
+        test += test_Cornell
+        datasets.append({"Cornell": {"train": train_Cornell, "dev": dev_Cornell, "test": test_Cornell}})
+
+    if ("Wow" in dataset_list):
+        print("LOAD Wow")
+        train_Wow, dev_Wow, test_Wow = preprocessMain.process_wow(develop=develop)
+
+        n_turns = get_n_turns(train_Wow)
+        table.append({"Name":"Wow","Trn":len(train_Wow),"Val":len(dev_Wow),"Tst":len(test_Wow), "Tur":n_turns})
+        train += train_Wow
+        dev += dev_Wow
+        test += test_Wow
+        datasets.append({"Wow": {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}})
+
+
+    if ("Ubuntu" in dataset_list):
+        print("LOAD Ubuntu")
+        train_Ubuntu, dev_Ubuntu, test_Ubuntu = preprocessMain.process_ubuntu(develop=develop)
+
+        n_turns = get_n_turns(train_Ubuntu)
+        table.append({"Name":"Ubuntu","Trn":len(train_Ubuntu),"Val":len(dev_Ubuntu),"Tst":len(test_Ubuntu), "Tur":n_turns})
+        train += train_Ubuntu
+        dev += dev_Ubuntu
+        test += test_Ubuntu
+        datasets.append({"Ubuntu": {"train": train_Ubuntu, "dev": dev_Ubuntu, "test": test_Ubuntu}})
 
     n_turns = get_n_turns(train)
     table.append({"Name":"TOT","Trn":len(train),"Val":len(dev),"Tst":len(test), "Tur":n_turns})

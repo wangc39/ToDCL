@@ -202,15 +202,15 @@ def get_data_loaders(args, tokenizer, test=False):
     if(args.continual):
         if(not test):
             for task_id, dataset_task in datasets["train"].items():
-                trainMSDatasets = MSDataset(dataset_task, tokenizer)
+                trainMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id)
                 train_loaders[task_id] = DataLoader(
                     trainMSDatasets, 
                     batch_size=args.train_batch_size, 
-                    collate_fn=partial(collate_fn_, tokenizer=tokenizer),
+                    collate_fn=validMSDatasets.collate,
                     shuffle=True)
                 train_datasets[task_id] = dataset_task
             for task_id, dataset_task in datasets["dev"].items():
-                validMSDatasets = MSDataset(dataset_task, tokenizer)
+                validMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id)
                 valid_loaders[task_id] = DataLoader(
                     validMSDatasets, 
                     batch_size=args.valid_batch_size,

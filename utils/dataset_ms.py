@@ -37,7 +37,7 @@ class MSDataset(Dataset):
 
         self.batch_first = batch_first
         self.lm_labels = lm_labels
-        self.cur_task = cur_task if cur_task else self.data[0]["dataset"]
+        self.cur_task = cur_task if cur_task else None # When multi task, cur task is uncertain
 
         # load dataset from token
         dataset_cache_path = "cache/{}_{}".format(self.cur_task, type(self.tokenizer).__name__)
@@ -79,12 +79,16 @@ class MSDataset(Dataset):
          
         # print(f"self.cur_task: {self.cur_task}")
         instance = None
+        self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
         if self.cur_task == "convai2":
             # TODO: add speaker1 and speaker2 to one list
             # to get speaker1 and speaker2
-            speaker1 = self.data[index]["kg"][:4].copy() # four utterances shape: [[], [], [], []]
-            speaker2 = self.data[index]["kg"][4:].copy() # four utterances
-            # kg = self.data[index]["kg"]
+            speaker1 = self.data[index]["speaker1"].copy() # four utterances shape: [[], [], [], []]
+            speaker2 = self.data[index]["speaker2"].copy() # four utterances
+
+            # speaker1 = self.data[index]["kg"][:4].copy() # four utterances shape: [[], [], [], []]
+            # speaker2 = self.data[index]["kg"][4:].copy() # four utterances
+
             persona = speaker1.copy()
             persona.extend(speaker2)
             length = len(persona)

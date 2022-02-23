@@ -8,11 +8,10 @@ import copy
 
 class PreprocessMain:
 
-    def __init__(self, taskConfig, generatePath, seed=42, history_min_length=2):
+    def __init__(self, taskConfig, seed=42, history_min_length=2):
 
         # path
         self.taskConfig = taskConfig
-        self.generatePath = generatePath
 
         # setting
         self.history_min_length = history_min_length
@@ -38,7 +37,8 @@ class PreprocessMain:
 
     def process_cornell(self, develop=develop):
 
-        path, modeList = taskConfig["path"], taskConfig["modeList"]
+        path, modeList = self.taskConfig["Cornell"]["path"], self.taskConfig["Cornell"]["modeList"]
+
 
         lines_files = os.path.join(path, "movie_lines.txt")
         convo_file = os.path.join(path, "movie_conversations.txt")
@@ -59,6 +59,7 @@ class PreprocessMain:
         outputs = {}
         for mode in modeList:
             outputs[mode] = []
+            dialogue_id = {"train": 0, "valid": 0, "test": 0}
             with codecs.open(convo_file, "r") as fp:
                 for cnt, line in enumerate(fp.readlines(), 1):
                     l = line.split(' ')
@@ -75,8 +76,12 @@ class PreprocessMain:
                     instance = {}
                     # get history and response
                     instance["utterances"] = []
+                    instance["dialogue_id"] = dialogue_id[mode]
+                    dialogue_id[mode] += 1
+                    instance["dataset"] = "Cornell"
                     for i in range(self.history_min_length, len(texts)):
                         utterance = {}
+                        utterance["utterance_id"] = i - self.history_min_length
                         utterance["history"] = [text.strip() for text in texts[:i]] # :2 == 0 1 
                         utterance["candidates"] = [texts[i].strip()]
                         instance["utterances"].append(utterance) # add dict to list
@@ -85,10 +90,12 @@ class PreprocessMain:
                     if instance["utterances"]: 
                         outputs[mode].append(instance)
 
-        return outputs
+        train_data, dev_data, test_data = outputs["train"], outputs["valid"], outputs["test"]
+        return train_data, dev_data, test_data
 
     def process_ubuntu(self, develop=develop):
-        path, modeList = taskConfig["path"], taskConfig["modeList"]
+        path, modeList = self.taskConfig["Ubuntu"]["path"], self.taskConfig["Ubuntu"]["modeList"]
+
 
         outputs = {}
         for mode in modeList:
@@ -98,7 +105,7 @@ class PreprocessMain:
 
                 csv_read = csv.reader(csv_file, delimiter=',') # , delimiter=','
                 next(csv_read)  # eat header
-                for line in csv_read:
+                for index, line in enumerate(csv_read):
                     
                     instance = {}
                     fields = [
@@ -109,11 +116,14 @@ class PreprocessMain:
                     response = fields[1]
 
                     instance["utterances"] = []
+                    instance["dialogue_id"] = index
+                    instance["dataset"] = "Ubuntu"
                     texts = context.split("\n") + [response] # concat context and response
                     for i in range(self.history_min_length, len(texts)):
                         utterance = {}
                         utterance["history"] = texts[:i] # :2 == 0 1 
                         utterance["candidates"] = [texts[i]]
+                        utterance["utterance_id"] = i - self.history_min_length
                         instance["utterances"].append(utterance) # add dict to list
 
                     cands = None
@@ -156,14 +166,14 @@ class PreprocessMain:
                 utterance = {}
                 utterance["history"] = [text.strip() for text in dialogues[:index]]
                 utterance["candidates"] = [dialogues[index].strip()]
-                utterance["utterance_id"] = index
+                utterance["utterance_id"] = index - self.history_min_length
                 instance["utterances"].append(utterance)
             
             # instance["turns"] = dialogues
             
             return instance
 
-        path, modeList = self.taskConfig["Convai2"]["path"], taskConfig["Convai2"]["modeList"]
+        path, modeList = self.taskConfig["Convai2"]["path"], self.taskConfig["Convai2"]["modeList"]
         
         your_persona_flag = "your persona: "
         partner_persona_flag = "partner's persona: "
@@ -249,7 +259,7 @@ class PreprocessMain:
 
     def process_daily(self, develop=develop):
 
-        path, modeList = self.taskConfig["Daily"]["path"], taskConfig["Daily"]["modeList"]
+        path, modeList = self.taskConfig["Daily"]["path"], self.taskConfig["Daily"]["modeList"]
 
         outputs = {}
         for mode in modeList:
@@ -275,6 +285,7 @@ class PreprocessMain:
                         utterance = {}
                         utterance["candidates"] = [dialog[i]["text"].strip()] # only need last utterance
                         utterance["history"] = [item["text"].strip() for item in dialog[:i][:]]
+                        utterance["utterance_id"] = i - self.history_min_length
 
                         instance["utterances"].append(utterance)
                     
@@ -287,7 +298,7 @@ class PreprocessMain:
 
     def process_ed(self, develop=develop):
 
-        path, modeList = self.taskConfig["Ed"]["path"], taskConfig["Ed"]["modeList"]
+        path, modeList = self.taskConfig["Ed"]["path"], self.taskConfig["Ed"]["modeList"]
 
         outputs = {}
         for mode in modeList:
@@ -298,9 +309,11 @@ class PreprocessMain:
                 data = json.load(fp)
 
 
-            for line in data:
+            for index, line in enumerate(data):
                 instance = {}
                 dialog = line["dialog"]
+                instance["dataset"] = "Ed"
+                instance["dialogue_id"] = index
                 instance["prompt"] = [line["prompt"].strip()]
                 instance["context"] = line["context"].strip()
                 instance["utterances"] = []
@@ -308,7 +321,7 @@ class PreprocessMain:
                     utterance = {}
                     utterance["candidates"] = [dialog[i]["utterance"].strip()]
                     utterance["history"] = [item["utterance"].strip() for item in dialog[:i][:]]
-                    
+                    utterance["utterance_id"] = i - self.history_min_length
                     instance["utterances"].append(utterance)
                 
                 if instance["utterances"]:
@@ -326,7 +339,9 @@ class PreprocessMain:
         output: list[list[str]]
         '''
 
-        path, modeList = taskConfig["path"], taskConfig["modeList"]
+        path, modeList = self.taskConfig["Wow"]["path"], self.taskConfig["Wow"]["modeList"]
+
+
         outputs = {"train": [], "valid": [], "test": []}
         for mode in modeList:
 
@@ -336,7 +351,7 @@ class PreprocessMain:
             with open(input_f, "r") as f:
                 data = json.load(f)
 
-            for d in data:
+            for index, d in enumerate(data):
 
                 instance = {}
                 dialog = d["dialog"]
@@ -349,19 +364,23 @@ class PreprocessMain:
                 else:
                     raise Exception("Wow dataset do not begin with wizard or apprentice")
 
+                instance["dataset"] = "Wow"
+                instance["dialogue_id"] = index
                 instance["topic"] = d["chosen_topic"]
                 instance["persona"] = [d["persona"].strip()]
                 instance["utterances"] = []
                 for i in range(start, len(dialog)):
                     utterance = {}
+                    utterance["utterance_id"] = i - start
                     utterance["candidates"] = [dialog[i]["text"].strip()]
                     utterance["history"] = [item["text"].strip() for item in dialog[:i][:]]
                     instance["utterances"].append(utterance)
 
                 if instance["utterances"]: 
                     outputs[mode_split].extend([instance])
-                
-        return outputs
+
+        train_data, dev_data, test_data = outputs["train"], outputs["valid"], outputs["test"]
+        return train_data, dev_data, test_data
 
 
     def save(self, taskname, outputs):
