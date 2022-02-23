@@ -23,7 +23,7 @@ class PreprocessMain:
 
         # ignore encoding error
         codecs.register_error('strict', codecs.ignore_errors)
-        self.check_folder_exists_make(self.generatePath)
+        # self.check_folder_exists_make(self.generatePath)
 
         self.set_seed(self.seed)
 
@@ -35,7 +35,7 @@ class PreprocessMain:
         random.seed(seed)
 
 
-    def process_cornell(self, develop=develop):
+    def process_cornell(self, develop=False):
 
         path, modeList = self.taskConfig["Cornell"]["path"], self.taskConfig["Cornell"]["modeList"]
 
@@ -93,7 +93,7 @@ class PreprocessMain:
         train_data, dev_data, test_data = outputs["train"], outputs["valid"], outputs["test"]
         return train_data, dev_data, test_data
 
-    def process_ubuntu(self, develop=develop):
+    def process_ubuntu(self, develop=False):
         path, modeList = self.taskConfig["Ubuntu"]["path"], self.taskConfig["Ubuntu"]["modeList"]
 
 
@@ -139,7 +139,7 @@ class PreprocessMain:
 
         return outputs
 
-    def process_convai2(self, develop=develop):
+    def process_convai2(self, develop=False):
 
         def deal_persona_dialogue(your_persona, partner_persona, dialogues, dialogues_id=0):
             '''return traditional instance
@@ -257,7 +257,7 @@ class PreprocessMain:
         return train_data, dev_data, test_data
 
 
-    def process_daily(self, develop=develop):
+    def process_daily(self, develop=False):
 
         path, modeList = self.taskConfig["Daily"]["path"], self.taskConfig["Daily"]["modeList"]
 
@@ -296,7 +296,7 @@ class PreprocessMain:
         return train_data, dev_data, test_data
 
 
-    def process_ed(self, develop=develop):
+    def process_ed(self, develop=False):
 
         path, modeList = self.taskConfig["Ed"]["path"], self.taskConfig["Ed"]["modeList"]
 
@@ -304,7 +304,7 @@ class PreprocessMain:
         for mode in modeList:
             outputs[mode] = []
             jsonPath = os.path.join(path, "{}.json".format(mode))
-
+            # print(os.getcwd())
             with codecs.open(jsonPath, "r") as fp:
                 data = json.load(fp)
 
@@ -332,7 +332,7 @@ class PreprocessMain:
         return train_data, dev_data, test_data
 
     
-    def process_wow(self, develop=develop):
+    def process_wow(self, develop=False):
         '''
         # TODO: wheather need to add the "retrieved_passages" item to context or not. (may do not need)
         mode: train/valid_random_split/test_random_split

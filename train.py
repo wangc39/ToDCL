@@ -194,7 +194,9 @@ if __name__ == '__main__':
     parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
     parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for validation")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    parser.add_argument("--dataset_list", type=str, default="SGD,TM19,TM20,MWOZ", help="Path for saving")
+    # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily,Cornell", help="Path for saving")
+    parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
+
     parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
     parser.add_argument("--setting", type=str, default="single", help="Path for saving")
@@ -203,6 +205,7 @@ if __name__ == '__main__':
     parser.add_argument("--length", type=int, default=50, help="lenght of the generation")
     parser.add_argument("--debug", action='store_true', help="continual baseline")
     parser.add_argument("--n_epochs", type=int, default=5, help="Number of training epochs")
+    parser.add_argument("--num_workers", type=int, default=4, help="The number of workers")
 
     parser.add_argument("--bottleneck_size", type=int, default=100)
     parser.add_argument("--number_of_adpt", type=int, default=40, help="number of adapterss")

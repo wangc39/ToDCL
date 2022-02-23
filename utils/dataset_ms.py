@@ -2,21 +2,23 @@
 import os
 import numpy as np
 from itertools import chain
+from collections import defaultdict
 
 import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 
-SPECIAL_TOKENS = {"convai2": ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<bg>" ],
-                  "daily": ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<bg>" ], 
-                  "ed": ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<bg>" ],
-                  "wow": ["<bos>", "<eos>", "<speaker1>", "<speaker2>", "<bg>"],
+SPECIAL_TOKENS = {"Convai2": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]" ],
+                  "Daily": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"], 
+                  "Ed": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]" ],
+                  "Wow": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"],
                   }
 
-ATTR_TO_SPECIAL_TOKEN = {'pad_token': '<pad>', 'unk_token': '<unk>',
+ATTR_TO_SPECIAL_TOKEN = {'pad_token': '[PAD]', 'unk_token': '[unk]',
                     'additional_special_tokens': 
-                    ("<bos>", "<eos>", "<speaker1>", "<speaker2>", "<bg>",)}
+                    ("[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]", 
+                    "Convai2", "Ed", "Cornell", "Ubuntu", "Daily", "Wow")} # add for task name
 
 
 class MSDataset(Dataset):
@@ -32,8 +34,14 @@ class MSDataset(Dataset):
         self.pad = tokenizer.pad_token_id
         # print(tokenizer.pad_token_id)
         # print(tokenizer.convert_tokens_to_ids(ATTR_TO_SPECIAL_TOKEN['pad_token']))
+
+        # print("tokenizer.eos_token_id", tokenizer.eos_token_id)
+        # print("tokenizer.bos_token_id", tokenizer.bos_token_id)
+        # print("SPECIAL_TOKENS: ", tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS["Convai2"]))
+        # print("tokenizer.eos_token_id", tokenizer.eos_token_id)
+
         # print("====="*20)
-        assert(self.pad == tokenizer.convert_tokens_to_ids(ATTR_TO_SPECIAL_TOKEN['pad_token']))
+        assert(self.pad == self.tokenizer.convert_tokens_to_ids(ATTR_TO_SPECIAL_TOKEN['pad_token']))
 
         self.batch_first = batch_first
         self.lm_labels = lm_labels
@@ -51,7 +59,7 @@ class MSDataset(Dataset):
     
     def get_data_token(self, dataset_cache_path):
         
-        data = []
+        data = defaultdict(list)
         if dataset_cache_path and os.path.exists(dataset_cache_path):
             print("Loading dataset from ({})".format(dataset_cache_path))
             data = torch.load(dataset_cache_path)
@@ -69,7 +77,7 @@ class MSDataset(Dataset):
         
             data = tokenize(self.data)
             if dataset_cache_path:
-                torch.save(self.data, dataset_cache_path)
+                torch.save(data, dataset_cache_path)
         return data
 
     def __len__(self):
@@ -79,7 +87,11 @@ class MSDataset(Dataset):
          
         # print(f"self.cur_task: {self.cur_task}")
         instance = None
-        self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
+        # print("task name", self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"]))
+        if self.data[index]["dataset"]:
+            self.cur_task = self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"])[0]
+        # print(type(self.cur_task))
+        # self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
         
         if self.cur_task == "Convai2":
             # TODO: add speaker1 and speaker2 to one list

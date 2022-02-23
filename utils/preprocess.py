@@ -1,6 +1,7 @@
 from data.MWOZ import preprocessMWOZ
 from data.SGD import preprocessSGD
 from data.TM import preprocessTM2019,preprocessTM2020
+from data.Convai2 import preprocessConvai2
 from termcolor import colored
 import numpy as np
 import random
@@ -8,162 +9,155 @@ import re
 from tabulate import tabulate
 from termcolor import colored
 from collections import defaultdict
+from data.preprocess_main import PreprocessMain
 
 def get_n_turns(data):
-    len_dialogue = []
-    len_dialogue.append(len([0 for dia in data for t in dia["dialogue"] ]))
+    # len_dialogue = []
+    # len_dialogue.append(len([0 for dia in data for t in dia["utterances"]]))
+    len_dialogue = [(len(dia["utterances"][-1]["history"]) + len(dia["utterances"][-1]["candidates"])) for dia in data]
+
     return np.mean(len_dialogue)
-
-def get_domains_slots(data):
-    services = set()
-    intent = set()
-    len_dialogue = []
-    for dial in data:
-        for s in dial["services"]:
-            services.add(s)
-        len_dialogue.append(len([0 for t in dial['dialogue'] if t["spk"] in ["USER","SYSTEM"]]))
-        for turn in dial['dialogue']:
-            if(turn["spk"]=="API"):
-                for s in turn["service"]:
-                    if(" " in s or len(s)==1):
-                        print(s) 
-                        print(turn)
-                        input()
-                    intent.add(s)
-    print("Domain",len(services))
-    print("Intent",len(intent))
-    print("Avg. Turns",np.mean(len_dialogue))
-    return len(services), len(intent), np.mean(len_dialogue), intent
-
-def filter_services(data,serv):
-    filtered_dialogue = []
-    for dial in data:
-        flag_temp = True
-        for turn in dial['dialogue']:
-            if(turn["spk"]=="API"):
-                for s in turn["service"]:
-                    if s not in serv:
-                        flag_temp = False
-        if(flag_temp):
-            filtered_dialogue.append(dial)
-    return filtered_dialogue
-
-
-def split_by_domain(data,setting):
-    data_by_domain = defaultdict(list)
-    if setting=="single":
-        for dial in data:
-            if(len(dial["services"])==1):
-                data_by_domain[str(sorted(dial["services"]))].append(dial)
-        print("SINGLE DOMAIN:",len(data_by_domain.keys()))
-
-    elif setting=="multi":
-        data_by_domain = defaultdict(list)
-        for dial in data:
-            data_by_domain[str(sorted(dial["services"]))].append(dial)
-        print("ALL DOMAIN:",len(data_by_domain.keys()))
-    else:
-        print("choose a setting: --setting single or --setting multi")
-        exit(1)
-    # for d,v in sorted(data_by_domain.items() ,  key=lambda x: len (eval(x[0]))):
-    #     print(d)
-    return dict(sorted(data_by_domain.items() ,  key=lambda x: len (eval(x[0]))))
 
 
 def print_sample(data,num):
     color_map = {"USER":"blue","SYSTEM":"magenta","API":"red","API-OUT":"green"}
     for i_d, dial in enumerate(random.sample(data,len(data))):
         print(f'ID:{dial["id"]}')
-        print(f'Services:{dial["services"]}')
-        for turn in dial['dialogue']:
-            print(colored(f'{turn["spk"]}:',color_map[turn["spk"]])+f' {turn["utt"]}')
+        # print(f'Services:{dial["services"]}')
+        for idx, his in dial["utterances"][0]["history"]:
+            print(his)
+        for turn in dial['utterances']:
+            print(f'{turn["candidates"][0]}')
         if i_d == num: break
 
-def get_datasets(dataset_list=['SGD'],setting="single",verbose=False,develop=False):
+def get_datasets(dataset_list=['SGD'], setting="single", verbose=False, develop=False):
 
+    taskConfig = {
+        "Cornell": {
+            "path": r"./data/CornellMovie/cornell movie-dialogs corpus", 
+            "modeList": ["train", "valid", "test"],
+            "remake": False,
+        },
+        "Ubuntu": {
+            "path": r"./data/Ubuntu", 
+            "modeList": ["train", "valid", "test"],
+            "remake": True,
+        },
+        "Convai2": {
+            "path": r"./data/convai2", 
+            "modeList": ["train", "valid"],
+            "remake": False,
+        },
+        "Daily": {
+            "path": r"./data/dailydialog", 
+            "modeList": ["train", "valid", "test"],
+            "remake": False,
+        },
+        "Ed": {
+            "path": r"./data/empatheticdialogues/visible", 
+            "modeList": ["train", "valid", "test"],
+            "remake": False,
+
+        },
+        "Wow": {
+            "path": r"./data/wizard_of_wikipedia", 
+            "modeList": ["train", "valid_random_split", "test_random_split"],
+            "remake": False,
+        },
+    }
+
+    preprocessMain = PreprocessMain(taskConfig)
+
+    
     table = []
     train = []
     dev = []
     test = []
-    if("TM19" in dataset_list):
-        print("LOAD TM19")
-        train_TM19, dev_TM19, test_TM19 = preprocessTM2019(develop=develop)
-        if(verbose):
-            print_sample(train_TM19,2)
-            input()
-        n_domain, n_intent, n_turns, _ = get_domains_slots(train_TM19)
-        table.append({"Name":"TM19","Trn":len(train_TM19),"Val":len(dev_TM19),"Tst":len(test_TM19),"Dom":n_domain,"Int":n_intent,"Tur":n_turns})
-        train += train_TM19
-        dev += dev_TM19
-        test += test_TM19
-
+    datasets = defaultdict(dict) # "Convai2": [train, dev, test]
 
     if ("Convai2" in dataset_list):
         print("LOAD Convai2")
-        train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
+        # train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
+        train_Convai2, dev_Convai2, test_Convai2 = preprocessMain.process_convai2(develop=develop)
+
         if(verbose):
             print_sample(train_Convai2,2)
             input()
         # n_domain, n_intent, n_turns, _ = get_domains_slots(train_Convai2)
         n_turns = get_n_turns(train_Convai2)
-        table.append({"Name":"TM19","Trn":len(train_Convai2),"Val":len(dev_Convai2),"Tst":len(dev_Convai2),"Dom": None,"Int": None,"Tur":n_turns})
+        table.append({"Name":"Convai2","Trn":len(train_Convai2),"Val":len(dev_Convai2),"Tst":len(test_Convai2), "Tur":n_turns})
         train += train_Convai2
         dev += dev_Convai2
         test += test_Convai2
+        datasets["Convai2"] = {"train": train_Convai2, "dev": dev_Convai2, "test": test_Convai2}
+        # datasets.append({"Convai2": {"train": train_Convai2, "dev": dev_Convai2, "test": test_Convai2}})
 
 
-    if("TM20" in dataset_list):
-        print("LOAD TM20")
-        train_TM20, dev_TM20, test_TM20 = preprocessTM2020(develop=develop)
-        if(verbose):
-            print_sample(train_TM20,2)
-            input()
-        n_domain, n_intent, n_turns, _ = get_domains_slots(train_TM20)
-        table.append({"Name":"TM20","Trn":len(train_TM20),"Val":len(dev_TM20),"Tst":len(test_TM20),"Dom":n_domain,"Int":n_intent,"Tur":n_turns})
-        train += train_TM20
-        dev += dev_TM20
-        test += test_TM20
+    if ("Ed" in dataset_list):
+        print("LOAD ED")
+        train_Ed, dev_Ed, test_Ed = preprocessMain.process_ed(develop=develop)
 
-    if("MWOZ" in dataset_list):
-        print("LOAD MWOZ")
-        train_MWOZ, dev_MWOZ,test_MWOZ = preprocessMWOZ(develop=develop)
-        if(verbose):
-            print_sample(train_MWOZ,2)
-            input()
-        n_domain, n_intent, n_turns, _ = get_domains_slots(train_MWOZ)
-        table.append({"Name":"MWOZ","Trn":len(train_MWOZ),"Val":len(dev_MWOZ),"Tst":len(test_MWOZ),"Dom":n_domain,"Int":n_intent,"Tur":n_turns})
-        train += train_MWOZ
-        dev += dev_MWOZ
-        test += test_MWOZ
+        n_turns = get_n_turns(train_Ed)
+        table.append({"Name":"Ed","Trn":len(train_Ed),"Val":len(dev_Ed),"Tst":len(test_Ed), "Tur":n_turns})
+        train += train_Ed
+        dev += dev_Ed
+        test += test_Ed
+        datasets["Ed"] = {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}
+        # datasets.append({"Ed": {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}})
 
-    if("SGD" in dataset_list):
-        print("LOAD SGD")
-        train_SGD, dev_SGD, test_SGD = preprocessSGD(develop=develop)
-        if(verbose):
-            print_sample(train_SGD,2)
-            input()
-        n_domain, n_intent, n_turns, _ = get_domains_slots(train_SGD)
-        table.append({"Name":"SGD","Trn":len(train_SGD),"Val":len(dev_SGD),"Tst":len(test_SGD),"Dom":n_domain,"Int":n_intent,"Tur":n_turns})
-        train += train_SGD
-        dev += dev_SGD
-        test += test_SGD
+    if ("Daily" in dataset_list):
+        print("LOAD Daily")
+        train_Daily, dev_Daily, test_Daily = preprocessMain.process_daily(develop=develop)
+
+        n_turns = get_n_turns(train_Ed)
+        table.append({"Name":"Daily","Trn":len(train_Daily),"Val":len(dev_Daily),"Tst":len(test_Daily), "Tur":n_turns})
+        train += train_Daily
+        dev += dev_Daily
+        test += test_Daily
+        datasets["Daily"] = {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}
+        # datasets.append({"Daily": {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}})
+
+    if ("Cornell" in dataset_list):
+        print("LOAD Cornell")
+        train_Cornell, dev_Cornell, test_Cornell = preprocessMain.process_cornell(develop=develop)
+
+        n_turns = get_n_turns(train_Cornell)
+        table.append({"Name":"Cornell","Trn":len(train_Cornell),"Val":len(dev_Cornell),"Tst":len(test_Cornell), "Tur":n_turns})
+        train += train_Cornell
+        dev += dev_Cornell
+        test += test_Cornell
+        datasets["Cornell"] = {"train": train_Cornell, "dev": dev_Cornell, "test": test_Cornell}
+
+    if ("Wow" in dataset_list):
+        print("LOAD Wow")
+        train_Wow, dev_Wow, test_Wow = preprocessMain.process_wow(develop=develop)
+
+        n_turns = get_n_turns(train_Wow)
+        table.append({"Name":"Wow","Trn":len(train_Wow),"Val":len(dev_Wow),"Tst":len(test_Wow), "Tur":n_turns})
+        train += train_Wow
+        dev += dev_Wow
+        test += test_Wow
+        datasets["Wow"] = {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}
+        # datasets.append({"Wow": {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}})
 
 
+    if ("Ubuntu" in dataset_list):
+        print("LOAD Ubuntu")
+        train_Ubuntu, dev_Ubuntu, test_Ubuntu = preprocessMain.process_ubuntu(develop=develop)
 
-    n_domain, n_intent, n_turns, services = get_domains_slots(train)
-    table.append({"Name":"TOT","Trn":len(train),"Val":len(dev),"Tst":len(test),"Dom":n_domain,"Int":n_intent,"Tur":n_turns})
-    test = filter_services(test,services) ## Remove dialogue with API not present in the test set
-    dev = filter_services(dev,services) ## Remove dialogue with API not present in the test set
-    n_domain, n_intent, n_turns, services = get_domains_slots(train)
-    if(verbose):
-        for inten in services:
-            print(inten)
-        input()
-    table.append({"Name":"TOT","Trn":len(train),"Val":len(dev),"Tst":len(test),"Dom":n_domain,"Int":n_intent,"Tur":n_turns})
+        n_turns = get_n_turns(train_Ubuntu)
+        table.append({"Name":"Ubuntu","Trn":len(train_Ubuntu),"Val":len(dev_Ubuntu),"Tst":len(test_Ubuntu), "Tur":n_turns})
+        train += train_Ubuntu
+        dev += dev_Ubuntu
+        test += test_Ubuntu
+        datasets["Ubuntu"] = {"train": train_Ubuntu, "dev": dev_Ubuntu, "test": test_Ubuntu}
+
+        # datasets.append({"Ubuntu": {"train": train_Ubuntu, "dev": dev_Ubuntu, "test": test_Ubuntu}})
+
+    n_turns = get_n_turns(train)
+    table.append({"Name":"TOT","Trn":len(train),"Val":len(dev),"Tst":len(test), "Tur":n_turns})
     print(tabulate(table, headers="keys"))
 
-    return {"TOTAL":{"train":train,"dev":dev,"test":test},
-               "BYDOMAIN":{"train":split_by_domain(train,setting), # dict {"domain_name": dial}
-                            "dev":split_by_domain(dev,setting),
-                            "test":split_by_domain(test,setting)}
-                            }
+    return {"TOTAL": {"train":train,"dev":dev,"test":test}, 
+            "AllDatasets": datasets}
+
