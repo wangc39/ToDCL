@@ -75,7 +75,7 @@ class Seq2SeqToD(pl.LightningModule):
         shift_logits = lm_logits[..., :-1, :].contiguous()
         shift_labels = batch["output_id_PPL"].to(device)[..., 1:].contiguous()
         # Flatten the tokens
-        loss_fct = CrossEntropyLoss(reduction='none')
+        loss_fct = CrossEntropyLoss(ignore_index=-1, reduction='none')
         loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         loss = torch.reshape(loss, shift_labels.size())
         return (loss.sum(1)/(loss!=0).sum(1)).tolist()
