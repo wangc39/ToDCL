@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import re
 import numpy as np
 from itertools import chain
 from collections import defaultdict
@@ -18,7 +19,7 @@ SPECIAL_TOKENS = {"Convai2": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg
 ATTR_TO_SPECIAL_TOKEN = {'pad_token': '[PAD]', 'unk_token': '[unk]',
                     'additional_special_tokens': 
                     ("[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]", 
-                    "Convai2", "Ed", "Cornell", "Ubuntu", "Daily", "Wow")} # add for task name
+                    "Convai2", "[Ed]", "[Cornell]", "[Ubuntu]", "[Daily]", "[Wow]")} # add for task name
 
 
 class MSDataset(Dataset):
@@ -88,9 +89,11 @@ class MSDataset(Dataset):
         # print(f"self.cur_task: {self.cur_task}")
         instance = None
         # print("task name", self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"]))
+        # to get cur task name
         if self.data[index]["dataset"]:
-            self.cur_task = self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"])[0]
-        # print(type(self.cur_task))
+            self.cur_task = re.sub(r"[^a-zA-Z]", "", self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"])[0])
+
+        # print(type(self.cur_task), self.cur_task)
         # self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
         
         if self.cur_task == "Convai2":
@@ -198,7 +201,9 @@ class MSDataset(Dataset):
         # TODO: whether need to add bos for token_type_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
         # instance["token_type_ids"] = [bos] + [persona_token for _ in sequence[0][1:]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
-        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
+        # instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
+        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+
         
         instance["index"] = index
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
@@ -223,7 +228,9 @@ class MSDataset(Dataset):
 
         instance["input_ids"] = list(chain(*sequence)) # concatenate input_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
-        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
+        # instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
+        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+
 
         assert len(instance["lm_labels"]) == len(instance["token_type_ids"])
         assert len(instance["token_type_ids"]) == len(instance["input_ids"])
@@ -259,7 +266,9 @@ class MSDataset(Dataset):
 
         instance["input_ids"] = list(chain(*sequence)) # concatenate input_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
-        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
+        # instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
+        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+
         
         instance["index"] = index
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
@@ -288,7 +297,9 @@ class MSDataset(Dataset):
         # TODO: whether need to add bos for token_type_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]]  + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
         # instance["token_type_ids"] = [bos] + [topic_token for _ in sequence[0][1:]] + [persona_token for _ in sequence[1]]  + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[2:]) for _ in s]
-        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
+        # instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+
         
         instance["index"] = index
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
@@ -344,7 +355,11 @@ class MSDataset(Dataset):
 
     def collate(self, batch):
         
-        has_kg = True if "kg" in batch[0] else False
+        has_kg = True 
+        for b in batch:
+            if "kg" not in b:
+                has_kg = False
+        # has_kg = False if "kg" not in b for b in batch 
 
         input_ids = pad_sequence(
             [torch.tensor(instance["input_ids"], dtype=torch.long) for instance in batch],
@@ -354,7 +369,7 @@ class MSDataset(Dataset):
             batch_first=self.batch_first, padding_value=self.pad)
         labels = pad_sequence(
             [torch.tensor(instance["lm_labels"], dtype=torch.long) for instance in batch],
-            batch_first=self.batch_first, padding_value=-1)
+            batch_first=self.batch_first, padding_value=self.pad)
         attention_masks_2d = pad_sequence(
             [torch.tensor(instance["attention_masks_2d"], dtype=torch.long) for instance in batch],
             batch_first=self.batch_first, padding_value=0)

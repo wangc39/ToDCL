@@ -76,9 +76,9 @@ class PreprocessMain:
                     instance = {}
                     # get history and response
                     instance["utterances"] = []
+                    instance["dataset"] = "[Cornell]"
                     instance["dialogue_id"] = dialogue_id[mode]
                     dialogue_id[mode] += 1
-                    instance["dataset"] = "Cornell"
                     for i in range(self.history_min_length, len(texts)):
                         utterance = {}
                         utterance["utterance_id"] = i - self.history_min_length
@@ -117,7 +117,7 @@ class PreprocessMain:
 
                     instance["utterances"] = []
                     instance["dialogue_id"] = index
-                    instance["dataset"] = "Ubuntu"
+                    instance["dataset"] = "[Ubuntu]"
                     texts = context.split("\n") + [response] # concat context and response
                     for i in range(self.history_min_length, len(texts)):
                         utterance = {}
@@ -157,7 +157,7 @@ class PreprocessMain:
 
 
             instance = {}
-            instance["dataset"] = "Convai2"
+            instance["dataset"] = "[Convai2]"
             instance["dialogue_id"] = dialogues_id
             instance["speaker1"] = copy.deepcopy(your_persona) 
             instance["speaker2"] = copy.deepcopy(partner_persona)
@@ -276,7 +276,7 @@ class PreprocessMain:
                     topic = line["topic"]   
                     # TODO: whether need to split according _
                     # topic = (" ").join(topic.split("_"))
-                    instance["dataset"] = "Daily"
+                    instance["dataset"] = "[Daily]"
                     instance["dialogue_id"] = index
                     instance["topic"] = topic
                     instance["utterances"] = []
@@ -312,7 +312,7 @@ class PreprocessMain:
             for index, line in enumerate(data):
                 instance = {}
                 dialog = line["dialog"]
-                instance["dataset"] = "Ed"
+                instance["dataset"] = "[Ed]"
                 instance["dialogue_id"] = index
                 instance["prompt"] = [line["prompt"].strip()]
                 instance["context"] = line["context"].strip()
@@ -364,7 +364,7 @@ class PreprocessMain:
                 else:
                     raise Exception("Wow dataset do not begin with wizard or apprentice")
 
-                instance["dataset"] = "Wow"
+                instance["dataset"] = "[Wow]"
                 instance["dialogue_id"] = index
                 instance["topic"] = d["chosen_topic"]
                 instance["persona"] = [d["persona"].strip()]

@@ -117,7 +117,7 @@ class Seq2SeqToD(pl.LightningModule):
             kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
             # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(self.device) for input_tensor in batch)
 
-        print(input_ids.size())
+        # print(input_ids.size())
 
         ## LOSS ON CURRENT DATA
         if(self.CL == "ADAPTER"):
@@ -199,10 +199,10 @@ class Seq2SeqToD(pl.LightningModule):
                                 )
         else:
             # print(input_ids.size())
-            print(f"input ids: {input_ids}, shape {input_ids.shape}")
-            print(f"token type ids: {token_type_ids}, shape: {token_type_ids.shape}")
-            print(f"lm labels: {labels}, shape: {labels.shape}")
-            print("---"*30)
+            # print(f"input ids: {input_ids}, shape {input_ids.shape}")
+            # print(f"token type ids: {token_type_ids}, shape: {token_type_ids.shape}")
+            # print(f"lm labels: {labels}, shape: {labels.shape}")
+            # print("---"*30)
             # exit(1)
             # print(batch["encoder_input"].size())
 

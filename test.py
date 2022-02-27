@@ -76,10 +76,13 @@ def get_example_inputs(model,tokenizer,prompt_text,device):
     return input_ids.to(device), attention_mask.to(device), position_ids.to(device), empty_past
 
 
-def test_generation_GPT2BATCH(model, tokenizer, input_text, device, do_sample=False, temperature=1.0,top_k=0,top_p=0,max_length=30, task_id=-1):
+def test_generation_GPT2BATCH(model, tokenizer, input_text, device, do_sample=False, temperature=1.0,  top_k=0, top_p=0, max_length=30, task_id=-1):
+    
+    
+    
     eos_token_id = tokenizer.eos_token_id
 
-    input_ids, attention_mask, position_ids, past = get_example_inputs(model,tokenizer,input_text,device)
+    input_ids, attention_mask, position_ids, past = get_example_inputs(model, tokenizer,input_text,device)
     batch_size = input_ids.size(0)
 
     has_eos = torch.zeros(batch_size, dtype=torch.bool).to(device)
@@ -103,7 +106,7 @@ def test_generation_GPT2BATCH(model, tokenizer, input_text, device, do_sample=Fa
             next_token_logscores = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
             # Sample
             probs = F.softmax(next_token_logscores, dim=-1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1) # sample one token 
         else:
             # Greedy decoding
             next_tokens = torch.argmax(next_token_logits, dim=-1)
@@ -183,6 +186,8 @@ def test_model_seq2seq(args,model,tokenizer,test_loader,time="0_['']"):
 
     for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader)):
         with torch.no_grad():
+            input_ids, token_type_ids, labels, indexes, attention_masks_2d, \
+                                    kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
             if "gpt2" in args.model_checkpoint:
                 value_batch,_ = test_generation_GPT2BATCH(model=model,
                                                     tokenizer=tokenizer,

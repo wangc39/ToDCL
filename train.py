@@ -81,7 +81,7 @@ def train(hparams, *args):
         print ("Time elapsed:", end - start)
         model.model.save_pretrained(f'{hparams.saving_dir}')
         model.tokenizer.save_pretrained(f'{hparams.saving_dir}')
-        test_model_seq2seq(hparams,model.model,model.tokenizer,dev_val_loader,time=f"FINAL")
+        test_model_seq2seq(hparams, model.model, model.tokenizer, dev_val_loader, time=f"FINAL")
     elif hparams.continual:
         for task_num, (task_id, task_loader) in enumerate(train_loader.items()):
             model.task_list_seen.append(task_id)
