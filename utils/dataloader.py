@@ -156,13 +156,25 @@ def collate_fn_GPT2(data, tokenizer):
     return batch_data
 
 
-def make_loader(args,list_sample,tokenizer):
-    collate_fn_ = collate_fn_GPT2 if("gpt2" in args.model_checkpoint) else collate_fn
-    return DataLoader(DatasetTrain(list_sample), batch_size=args.train_batch_size, shuffle=True,collate_fn=partial(collate_fn_, tokenizer=tokenizer))
+def make_loader(args, tokenizer, origin_dataset, extra_dataset=None, cur_task=None):
+
+    datasets = MSDataset(origin_dataset, tokenizer, extra_data=extra_dataset, cur_task=task_id+"_train")
+    dataloader = DataLoader(
+        datasets, 
+        batch_size=args.train_batch_size, 
+        collate_fn=trainMSDatasets.collate,
+        num_workers=args.num_workers,
+        shuffle=True)
+
+    # collate_fn_ = collate_fn_GPT2 if("gpt2" in args.model_checkpoint) else collate_fn
+    # return DataLoader(DatasetTrain(list_sample), batch_size=args.train_batch_size, shuffle=True,collate_fn=partial(collate_fn_, tokenizer=tokenizer))
+    return dataloader
+
 
 def get_data_loaders(args, tokenizer, test=False):
     """ Prepare the dataset for training and evaluation """
     aggregate = get_datasets(dataset_list=args.dataset_list.split(','), setting=args.setting, verbose=args.verbose, develop=args.debug)
+    
 
     collate_fn_ = collate_fn_GPT2 if("gpt2" in args.model_checkpoint) else collate_fn
     
@@ -203,7 +215,7 @@ def get_data_loaders(args, tokenizer, test=False):
                 train_loaders[task_id] = DataLoader(
                     trainMSDatasets, 
                     batch_size=args.train_batch_size, 
-                    collate_fn=validMSDatasets.collate,
+                    collate_fn=trainMSDatasets.collate,
                     num_workers=args.num_workers,
                     shuffle=True)
                 train_datasets[task_id] = dataset_task
@@ -248,7 +260,7 @@ def get_data_loaders(args, tokenizer, test=False):
     test_datasets = sum(temp_list,[])
     testMSDatasets = MSDataset(test_datasets, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys()) + "_test", lm_labels=False, with_eos=False)
     test_loaders = DataLoader(
-        DatasetTrain(sum(temp_list,[])), 
+        testMSDatasets, 
         batch_size=args.test_batch_size, # test_batch_size = 1
         collate_fn=testMSDatasets.collate, # unless to get padding result
         num_workers=args.num_workers,

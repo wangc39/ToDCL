@@ -21,7 +21,7 @@ from CL_learner import Seq2SeqToD
 from utils.dataset_ms import SPECIAL_TOKENS
 
 
-def _top_k_top_p_filtering(self, logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
+def _top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (vocabulary size)
@@ -83,31 +83,39 @@ def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, targe
     
     
     
-    eos_token_id = tokenizer.eos_token_id
+    # eos_token_id = tokenizer.eos_token_id
 
-    task_name = SPECIAL_TOKENS.keys()[0] if task_id == -1 else SPECIAL_TOKENS.keys()[task_id]
-    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[taskname])
+    task_name = list(SPECIAL_TOKENS.keys())[0] if task_id == -1 else SPECIAL_TOKENS[task_id]
+    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[task_name])
     bos, eos, speaker1, speaker2, bg_token = special_tokens_ids
 
-    if current_output is None:
-        current_output = []
+    # if current_output is None:
+    current_output = []
     finish_set = set()
 
-    input_ids = [copy.deepcopy(input_ids) for _ in range(responses_generate_times)]
-    token_type_ids = [copy.deepcopy(token_type_ids) for _ in range(responses_generate_times)]
-    target_ids = [copy.deepcopy(target) for _ in range(responses_generate_times)]
 
+
+    input_ids = input_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
+    token_type_ids = token_type_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
+    target_ids = target_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
+
+    # print("input_ids.shape", input_ids.shape)
+    # print("token_type_ids.shape", token_type_ids.shape)
+    # print("target_ids.shape", target_ids.shape)
+
+    # input_ids = torch.tensor(input_ids, dtype=torch.long, device=device)
+    # token_type_ids = torch.tensor(token_type_ids, dtype=torch.long, device=device)
+    # target_ids = torch.tensor(target_ids, dtype=torch.long, device=device)
 
     for step in range(max_length):
 
         if task_id == -1:
             outputs = model(input_ids, token_type_ids=token_type_ids)
         else:
-            outputs = model(input_ids, attention_mask=attention_mask, position_ids=position_ids, task_id=task_id)
+            outputs = model(input_ids,  token_type_ids=token_type_ids, task_id=task_id)
 
-        next_token_logits = outputs[0][:, -1, :]
-        logits = logits[:, -1, :]  # response logit
-        for index in range(batch_size):
+        logits = outputs[0][:, -1, :] # response logit
+        for index in range(responses_generate_times):
             for token_id in set([token_ids[index] for token_ids in current_output]):
                 logits[index][token_id] /= repetition_penalty # repeat punishment default equal to 1.0
         logits = logits / (temperature if temperature > 0 else 1.0)
@@ -124,7 +132,7 @@ def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, targe
         
         finish_flag = True
         # 如果有一个没有生成完毕的话 继续生成文本
-        for index in range(self.batch_size):
+        for index in range(responses_generate_times):
             if index not in finish_set:
                 finish_flag = False
                 break
@@ -195,19 +203,26 @@ def generate_sample_prev_task(args,model,tokenizer,dataset_dic,task_id_so_far,nu
         json.dump(temp_aug, fp, indent=4)
     return temp_aug
 
-def test_model_seq2seq(args,model,tokenizer,test_loader,time="0_['']"):
+def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
     device = torch.device(f"cuda:0")
     model.to(device)
     model.eval()
 
     gt_replys = []
-    results = []
+    predictions = []
+    # results = []
 
     for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader)):
         with torch.no_grad():
             input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
-                                    kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(device) for input_tensor in batch)
+                                    kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
+                                    # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
 
+            # print("input_ids.shape", input_ids.shape)
+            # print("token_type_ids.shape", token_type_ids.shape)
+            # print("target_ids.shape", target_ids.shape)
+
+            # print()
             if "gpt2" in args.model_checkpoint:
                 candidate_responses = test_generation_GPT2BATCH(model=model,
                                                     tokenizer=tokenizer,
@@ -226,7 +241,9 @@ def test_model_seq2seq(args,model,tokenizer,test_loader,time="0_['']"):
         
 
 
-            reply = tokenizer.decode(target_ids, skip_special_tokens=True)
+            # reply = tokenizer.decode(target_ids, skip_special_tokens=True)
+            reply = convert_ids_to_outtext(tokenizer, target_ids)
+
             gt_replys.append(reply)
             candidate_texts = convert_ids_to_outtext(tokenizer, candidate_responses)
             predictions.append('|||'.join(candidate_texts))
