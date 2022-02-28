@@ -5,53 +5,55 @@ import torch
 import numpy
 import logging
 import random
+import copy
 from tqdm import tqdm
 from torch import Tensor
 from torch.nn import functional as F
 from collections import defaultdict
-from utils.dataloader import make_loader
+from argparse import ArgumentParser
+
+# from utils.dataloader import make_loader
+from utils.dataloader import get_data_loaders, get_current_task_data, make_loader
+from CL_learner import Seq2SeqToD
 
 
 
-def top_k_top_p_filtering(
-    logits: Tensor,
-    top_k: int = 0,
-    top_p: float = 1.0,
-    filter_value: float = -float("Inf"),
-    min_tokens_to_keep: int = 1,
-    ) -> Tensor:
-    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-    Args:
-        logits: logits distribution shape (batch size, vocabulary size)
-        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        Make sure we keep at least min_tokens_to_keep per batch example in the output
-    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
+from utils.dataset_ms import SPECIAL_TOKENS
+
+
+def _top_k_top_p_filtering(self, logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
+    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+        Args:
+            logits: logits distribution shape (vocabulary size)
+            top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+            top_p > 0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
     """
+    assert logits.dim() == 2
+    top_k = min(top_k, logits[0].size(-1))
     if top_k > 0:
-        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-        logits[indices_to_remove] = filter_value
+        # Remove all tokens with a probability less than the last token in the top-k tokens
+        for logit in logits:
+            indices_to_remove = logit < torch.topk(logit, top_k)[0][..., -1, None]
+            logit[indices_to_remove] = filter_value
 
-    if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+    if top_p > 0.0:
+        # Compute cumulative probabilities of sorted tokens
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
-        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
+        # Remove tokens with cumulative probability above the threshold
         sorted_indices_to_remove = cumulative_probs > top_p
-        if min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
+        for index, logit in enumerate(logits):
+            # Back to unsorted indices and set them to -infinity
+            indices_to_remove = sorted_indices[index][sorted_indices_to_remove[index]]
+            logit[indices_to_remove] = filter_value
 
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-        logits[indices_to_remove] = filter_value
     return logits
+
 
 def get_example_inputs(model,tokenizer,prompt_text,device):
     num_attention_heads = model.config.n_head
@@ -76,61 +78,76 @@ def get_example_inputs(model,tokenizer,prompt_text,device):
     return input_ids.to(device), attention_mask.to(device), position_ids.to(device), empty_past
 
 
-def test_generation_GPT2BATCH(model, tokenizer, input_text, device, do_sample=False, temperature=1.0,  top_k=0, top_p=0, max_length=30, task_id=-1):
+def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, target_ids, device, do_sample=False, \
+                            temperature=1.0,  top_k=0, top_p=0, max_length=30, responses_generate_times=5, repetition_penalty=1.0, task_id=-1):
     
     
     
     eos_token_id = tokenizer.eos_token_id
 
-    input_ids, attention_mask, position_ids, past = get_example_inputs(model, tokenizer,input_text,device)
-    batch_size = input_ids.size(0)
+    task_name = SPECIAL_TOKENS.keys()[0] if task_id == -1 else SPECIAL_TOKENS.keys()[task_id]
+    special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[taskname])
+    bos, eos, speaker1, speaker2, bg_token = special_tokens_ids
 
-    has_eos = torch.zeros(batch_size, dtype=torch.bool).to(device)
+    if current_output is None:
+        current_output = []
+    finish_set = set()
 
-    all_token_ids = input_ids.clone()
+    input_ids = [copy.deepcopy(input_ids) for _ in range(responses_generate_times)]
+    token_type_ids = [copy.deepcopy(token_type_ids) for _ in range(responses_generate_times)]
+    target_ids = [copy.deepcopy(target) for _ in range(responses_generate_times)]
+
 
     for step in range(max_length):
 
         if task_id == -1:
-            outputs = model(input_ids, attention_mask=attention_mask, position_ids=position_ids, past_key_values=past)
+            outputs = model(input_ids, token_type_ids=token_type_ids)
         else:
-            outputs = model(input_ids, attention_mask=attention_mask, position_ids=position_ids, past_key_values=past, task_id=task_id)
+            outputs = model(input_ids, attention_mask=attention_mask, position_ids=position_ids, task_id=task_id)
 
         next_token_logits = outputs[0][:, -1, :]
+        logits = logits[:, -1, :]  # response logit
+        for index in range(batch_size):
+            for token_id in set([token_ids[index] for token_ids in current_output]):
+                logits[index][token_id] /= repetition_penalty # repeat punishment default equal to 1.0
+        logits = logits / (temperature if temperature > 0 else 1.0)
+        logits = _top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p) # batch size x vocab size
+        probs = F.softmax(logits, dim=-1)
 
-        if do_sample:
-            # Temperature (higher temperature => more likely to sample low probability tokens)
-            if temperature != 1.0:
-                next_token_logits = next_token_logits / temperature
-            # Top-p/top-k filtering
-            next_token_logscores = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-            # Sample
-            probs = F.softmax(next_token_logscores, dim=-1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1) # sample one token 
-        else:
-            # Greedy decoding
-            next_tokens = torch.argmax(next_token_logits, dim=-1)
-
-        has_eos = has_eos | (next_tokens == eos_token_id)
-        tokens_to_add = next_tokens.masked_fill(has_eos, eos_token_id)
-        all_token_ids = torch.cat([all_token_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
-
-        # Update input_ids, attention_mask, position_ids and past
-        input_ids = tokens_to_add.clone().detach().reshape([batch_size, 1]).to(device)
-        position_ids = (position_ids[:,-1] + 1).reshape(batch_size,1)
-        attention_mask = torch.cat([attention_mask, torch.ones([batch_size, 1]).type_as(attention_mask)], 1).to(device)
-
-        past = list(outputs[1]) # past in torch output is tuple
-        if torch.all(has_eos):
+        # return index of probs according to probs    shape: batch size x 1(5 x 1)
+        # TODO: sample for data is OK, but greedy is wrong
+        prev = torch.topk(probs, 1)[1] if do_sample else torch.multinomial(probs, 1) 
+        
+        for index, token_id in enumerate(prev[:, 0]):
+            if token_id == eos:
+                finish_set.add(index)
+        
+        finish_flag = True
+        # 如果有一个没有生成完毕的话 继续生成文本
+        for index in range(self.batch_size):
+            if index not in finish_set:
+                finish_flag = False
+                break
+        if finish_flag:
             break
+        current_output.append([token.item() for token in prev[:, 0]])
+        input_ids = torch.cat((input_ids, prev), dim=-1)
+        token_type_ids = torch.cat((token_type_ids, token_type_ids[:, -1].unsqueeze(-1)), dim=-1) # just repeat last row
 
-    responses = []
-    responses_plain = []
-    for i, output in enumerate(all_token_ids):
-        responses_plain.append(tokenizer.decode(output, skip_special_tokens=True))
-        res = tokenizer.decode(output, skip_special_tokens=True)
-        responses.append(res[res.find("[SOS]"):].replace("[SOS]","").strip())
-    return responses, responses_plain
+    candidate_responses = []
+    for batch_index in range(responses_generate_times):
+        response = []
+        for token_index in range(len(current_output)):
+            # 因为之前选择是 有一个没有生成完毕继续生成文本 所以这里要对之前生成完毕的文本进行筛选 选出已经停止生成的文本
+            if current_output[token_index][batch_index] != eos:
+                response.append(current_output[token_index][batch_index])
+            else:
+                break
+        candidate_responses.append(response)
+
+    return candidate_responses
+
+
 
 def generate_sample_prev_task(args,model,tokenizer,dataset_dic,task_id_so_far,number_of_sample,time,task_id_adpt=-1):
     # device = torch.device(f"cuda:{args.GPU[0]}")
@@ -182,17 +199,23 @@ def test_model_seq2seq(args,model,tokenizer,test_loader,time="0_['']"):
     device = torch.device(f"cuda:0")
     model.to(device)
     model.eval()
+
+    gt_replys = []
     results = []
 
     for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader)):
         with torch.no_grad():
-            input_ids, token_type_ids, labels, indexes, attention_masks_2d, \
-                                    kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
+            input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+                                    kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(device) for input_tensor in batch)
+
             if "gpt2" in args.model_checkpoint:
-                value_batch,_ = test_generation_GPT2BATCH(model=model,
+                candidate_responses = test_generation_GPT2BATCH(model=model,
                                                     tokenizer=tokenizer,
-                                                    input_text=[b+"[SOS]" for b in batch['history']],
+                                                    input_ids=input_ids,
+                                                    token_type_ids=token_type_ids,
+                                                    target_ids=target_ids,
                                                     device=device,
+                                                    responses_generate_times=args.responses_generate_times,
                                                     max_length = 100)
             else:
                 responses = model.generate(input_ids=batch["encoder_input"].to(device),
@@ -200,18 +223,40 @@ def test_model_seq2seq(args,model,tokenizer,test_loader,time="0_['']"):
                                             eos_token_id=tokenizer.eos_token_id,
                                             max_length=100)
                 value_batch = tokenizer.batch_decode(responses, skip_special_tokens=True)
-        for idx, resp in enumerate(value_batch):
-            results.append({"id":batch["dial_id"][idx],"turn_id":batch["turn_id"][idx],
-                            "dataset":batch["dataset"][idx],"task_id":batch["task_id"][idx],
-                            "spk":batch["spk"][idx],"gold":batch["reply"][idx],
-                            "genr":resp,"hist":batch["history"][idx]})
-        # if(idx_b==1): break
+        
+
+
+            reply = tokenizer.decode(target_ids, skip_special_tokens=True)
+            gt_replys.append(reply)
+            candidate_texts = convert_ids_to_outtext(tokenizer, candidate_responses)
+            predictions.append('|||'.join(candidate_texts))
+
+
     if not os.path.exists(f'{args.saving_dir}/{time}'):
         os.makedirs(f'{args.saving_dir}/{time}')
-    with open(f'{args.saving_dir}/{time}'+'/generated_responses.json', 'w') as fp:
-        json.dump(results, fp, indent=4)
-    tokenizer.padding_side = "right"
 
+    # TODO: file names
+    result_path = f'{args.saving_dir}/{time}'+'/result.txt'
+    gt_path = f'{args.saving_dir}/{time}'+'/gt.txt'
+    
+    with open(result_path, 'w', encoding="UTF-8") as f:
+        f.write("\n".join(predictions))
+    with open(gt_path, 'w', encoding="UTF-8") as f:
+        f.write("\n".join(gt_replys))
+
+    # print("============== {} infer done! ==============".format(cur_test_task))
+
+    # with open(f'{args.saving_dir}/{time}'+'/generated_responses.json', 'w') as fp:
+    #     json.dump(results, fp, indent=4)
+
+def convert_ids_to_outtext(tokenizer, candidate_responses):
+    candidate_texts = []
+    for response in candidate_responses:
+        out_text = tokenizer.decode(response, skip_special_tokens=True)
+        out_text_pieces = out_text
+        # out_text_pieces = ' '.join(jieba.lcut(''.join(out_text.split())))
+        candidate_texts.append(out_text_pieces)
+    return candidate_texts
 
 def argmin(a):
     return min(range(len(a)), key=lambda x: a[x])
@@ -305,20 +350,68 @@ def test_model_seq2seq_ADAPTER(args,model,tokenizer,test_loader,test_dataset,tim
     #     json.dump(results, fp, indent=4)
 
 
+def get_args():
+    parser = ArgumentParser()
+    parser.add_argument('--model_checkpoint', type=str, default="gpt2")
+    parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
+    parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
+    parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
+    parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
+    # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily,Cornell", help="Path for saving")
+    parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
+
+    parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
+    parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
+    parser.add_argument("--setting", type=str, default="single", help="Path for saving")
+    parser.add_argument("--verbose", action='store_true', help="continual baseline")
+    parser.add_argument("--test_every_step", action='store_true', help="continual baseline")
+    parser.add_argument("--length", type=int, default=50, help="lenght of the generation")
+    parser.add_argument("--debug", action='store_true', help="continual baseline")
+    parser.add_argument("--n_epochs", type=int, default=5, help="Number of training epochs")
+    parser.add_argument("--num_workers", type=int, default=4, help="The number of workers")
+
+    parser.add_argument("--bottleneck_size", type=int, default=100)
+    parser.add_argument("--number_of_adpt", type=int, default=40, help="number of adapterss")
+    parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
+    parser.add_argument("--percentage_LAM0L", type=float, default=0.2, help="LAMOL percentage of augmented data used")
+    parser.add_argument("--reg", type=float, default=0.01, help="CL regularization term")
+    parser.add_argument("--episodic_mem_size", type=int, default=100, help="number of batch/sample put in the episodic memory")
+    #  options=["E2E","DST","NLG","INTENT"]
+    parser.add_argument('--task_type', type=str, default="NLG")
+    #  options=["VANILLA"]
+    parser.add_argument('--CL', type=str, default="MULTI")
+    # options=[1,2,3,4,5]
+    parser.add_argument('--seed', default=42, type=int)
+
+
+    hyperparams = parser.parse_args()
+
+
+    return hyperparams
+
+
 def test():
-    pass
-    # args = get_args()
-    # model = Seq2SeqToD(args)
-    # model.model.load_state_dict(torch.load(f'runs_INTENT/BEST/ADAPTER_EPC_10_LR_0.00625_BOTL_100__gpt2/'))
+    # pass
+    args = get_args()
+    model = Seq2SeqToD(args)
+    saving_dir = r"runs_INTENT/BEST/ADAPTER_EPC_10_LR_0.00625_BOTL_100__gpt2/"
+    model.model.load_state_dict(torch.load(saving_dir))
+    model.tokenizer.from_pretrained(saving_dir)
 
-    # args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # _, _, test_loader, (_, _) = get_data_loaders(args, tokenizer, test=True)
+    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    _, _, test_loader, (_, _) = get_data_loaders(args, model.tokenizer, test=True)
     # train_loader, val_loader, dev_val_loader, (train_datasets, test_datasets) = get_data_loaders(args, model.tokenizer)
 
-    # print(f"Loading Model: {args.model_checkpoint}")
-    # model.to(args.device)
+    print(f"Loading Model: {args.model_checkpoint}")
+    model.to(args.device)
+
+    test_model_seq2seq(args, model.model, model.tokenizer, test_loader, time=f"FINAL")
+
     # test_model(args,model,tokenizer,test_loader)
 
 if __name__ == "__main__":
-    test()
+    # test()
+    pass

@@ -4,8 +4,11 @@ import torch
 from torch.nn import CrossEntropyLoss
 from random import sample
 import pytorch_lightning as pl
-from transformers import (AdamW, GPT2Tokenizer, GPT2LMHeadModel,T5Tokenizer, BartTokenizer, BartForConditionalGeneration, T5ForConditionalGeneration)
+from transformers import (AdamW, GPT2Tokenizer, T5Tokenizer, BartTokenizer, BartForConditionalGeneration, T5ForConditionalGeneration, )
 from model.adapterGPT2 import GPT2Adapter
+
+from model.gpt2LMHeadModel import GPT2LMHeadModel
+
 from utils.dataloader import get_data_loaders, get_current_task_data, make_loader
 from utils.dataset_ms import ATTR_TO_SPECIAL_TOKEN
 from collections import defaultdict
@@ -27,6 +30,7 @@ class Seq2SeqToD(pl.LightningModule):
                 model = GPT2Adapter.from_pretrained(args.model_checkpoint)
                 model.add_adapters(bottleneck_size=args.bottleneck_size,adapter_num=args.number_of_adpt)
             else:
+
                 model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
             tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
             # Add special tokens if they are not already added
@@ -113,7 +117,7 @@ class Seq2SeqToD(pl.LightningModule):
             self.model.zero_grad()
 
 
-        input_ids, token_type_ids, labels, indexes, attention_masks_2d, \
+        input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
             kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
             # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(self.device) for input_tensor in batch)
 
@@ -187,7 +191,7 @@ class Seq2SeqToD(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
 
-        input_ids, token_type_ids, labels, indexes, attention_masks_2d, \
+        input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
         kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
         # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(self.device) for input_tensor in batch)
 

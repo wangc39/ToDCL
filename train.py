@@ -192,7 +192,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_checkpoint', type=str, default="gpt2")
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
     parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
-    parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for validation")
+    parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
+    parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
     # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily,Cornell", help="Path for saving")
     parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")

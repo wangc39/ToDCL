@@ -25,7 +25,7 @@ ATTR_TO_SPECIAL_TOKEN = {'pad_token': '[PAD]', 'unk_token': '[unk]',
 class MSDataset(Dataset):
 
     def __init__(self, data, tokenizer, extra_data=None, cur_task=None, max_history=15, max_seq_len=512, max_response_len=128, batch_first=True, \
-        lm_labels=True):
+        lm_labels=True, with_eos=True):
         self.data = data
         self.tokenizer = tokenizer
         self.max_history = max_history
@@ -44,8 +44,10 @@ class MSDataset(Dataset):
         # print("====="*20)
         assert(self.pad == self.tokenizer.convert_tokens_to_ids(ATTR_TO_SPECIAL_TOKEN['pad_token']))
 
-        self.batch_first = batch_first
+        self.batch_first = batch_first # 表示第一维度 是否是batch_size对应的维度一般是True
+        # 当模型进行test的时候 lm_labels和eos为False
         self.lm_labels = lm_labels
+        self.with_eos = with_eos
         self.cur_task = cur_task if cur_task else None # When multi task, cur task is uncertain
 
         # load dataset from token
@@ -113,6 +115,7 @@ class MSDataset(Dataset):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only last one candidate which is gold response
                 instance = self.proprecess_convai2(index, persona, history, candidate, self.tokenizer, task=self.cur_task)
+                if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
 
         elif self.cur_task == "Daily":
             topic = self.data[index]["topic"]
@@ -120,6 +123,8 @@ class MSDataset(Dataset):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_daily(index, topic, history, candidate, self.tokenizer, task=self.cur_task)
+                if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
+
 
         elif self.cur_task == "Wow":
             topic = self.data[index]["topic"]
@@ -128,6 +133,8 @@ class MSDataset(Dataset):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_wow(index, topic, persona, history, candidate, self.tokenizer, task=self.cur_task)
+                if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
+
 
         elif self.cur_task == "Ed":
             context = self.data[index]["context"] # empathic word
@@ -136,12 +143,16 @@ class MSDataset(Dataset):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_ed(index, context, prompt, history, candidate, self.tokenizer, task=self.cur_task)
+                if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
+
 
         elif self.cur_task == "Ubuntu" or self.cur_task == "cornell": # ubuntu and cornell task is same
             for i, utterance in enumerate(self.data[index]["utterances"]):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
                 instance = self.proprecess_ubuntu(index, history, candidate, self.tokenizer, task=self.cur_task)
+                if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
+
         else:
             print(f"current task: {self.cur_task}")
             raise Exception("Can not find current task")
@@ -175,7 +186,7 @@ class MSDataset(Dataset):
         new_ids_list.reverse()
         return new_ids_list
 
-    def proprecess_convai2(self, index, persona, history, response, tokenizer, task, with_eos=True):
+    def proprecess_convai2(self, index, persona, history, response, tokenizer, task):
         """
         Args:
             persona ([[], [], [], []]): a list represent the persona information
@@ -186,7 +197,7 @@ class MSDataset(Dataset):
         bos, eos, speaker1, speaker2, bg_token = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[task])
         instance = {}
 
-        sequence = [[bos] + [bg_token] + list(chain(*persona))] + history + [response + ([eos] if with_eos else [])]
+        sequence = [[bos] + [bg_token] + list(chain(*persona))] + history + [response + ([eos] if self.with_eos else [])]
         sequence = [sequence[0]] + [[speaker1 if (len(sequence)-i) % 2 else speaker2] + s for i, s in enumerate(sequence[1:])]
 
         # TODO: whether need to truncate
@@ -201,8 +212,8 @@ class MSDataset(Dataset):
         # TODO: whether need to add bos for token_type_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
         # instance["token_type_ids"] = [bos] + [persona_token for _ in sequence[0][1:]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
-        # instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
-        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
+        # instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
 
         
         instance["index"] = index
@@ -212,10 +223,10 @@ class MSDataset(Dataset):
 
         return instance
 
-    def proprecess_daily(self, index, topic, history, response, tokenizer, task, with_eos=True):
+    def proprecess_daily(self, index, topic, history, response, tokenizer, task):
         bos, eos, speaker1, speaker2, bg_token = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[task])
         instance = {}
-        sequence = [[bos] + [bg_token] + list(topic)] + history + [response + ([eos] if with_eos else [])]
+        sequence = [[bos] + [bg_token] + list(topic)] + history + [response + ([eos] if self.with_eos else [])]
         sequence = [sequence[0]] + [[speaker1 if (len(sequence)-i) % 2 else speaker2] + s for i, s in enumerate(sequence[1:])]
 
         # TODO: whether need to truncate
@@ -228,8 +239,8 @@ class MSDataset(Dataset):
 
         instance["input_ids"] = list(chain(*sequence)) # concatenate input_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
-        # instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
-        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
+        # instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
 
 
         assert len(instance["lm_labels"]) == len(instance["token_type_ids"])
@@ -241,7 +252,7 @@ class MSDataset(Dataset):
 
         return instance
 
-    def proprecess_ed(self, index, context, prompt, history, response, tokenizer, task, with_eos=True):
+    def proprecess_ed(self, index, context, prompt, history, response, tokenizer, task):
         """
         Args:
             prompt: two dim list [[]], the shape should be 1 x N
@@ -252,7 +263,7 @@ class MSDataset(Dataset):
         # TODO: whether need to drop 'context' key word
         # print("prompt {}".format(prompt) )
         # exit(1)
-        sequence = [[bos] + [bg_token] + list(context) + prompt[0]]  +  history + [response + ([eos] if with_eos else [])]
+        sequence = [[bos] + [bg_token] + list(context) + prompt[0]]  +  history + [response + ([eos] if self.with_eos else [])]
         sequence = [sequence[0]] + [[speaker1 if (len(sequence)-i) % 2 else speaker2] + s for i, s in enumerate(sequence[1:])]
 
         # truncate
@@ -266,8 +277,9 @@ class MSDataset(Dataset):
 
         instance["input_ids"] = list(chain(*sequence)) # concatenate input_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]] + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
-        # instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
-        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
+        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
+
+        # instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
 
         
         instance["index"] = index
@@ -277,11 +289,11 @@ class MSDataset(Dataset):
     
         return instance
 
-    def proprecess_wow(self, index, topic, persona, history, response, tokenizer, task, with_eos=True):
+    def proprecess_wow(self, index, topic, persona, history, response, tokenizer, task):
         bos, eos, speaker1, speaker2, bg_token = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[task])
         instance = {}
         # TODO: whether need to dorp topci key words
-        sequence = [[bos] + [bg_token] + list(topic) + persona[0]] +  history + [response + ([eos] if with_eos else [])] # persona one utterance
+        sequence = [[bos] + [bg_token] + list(topic) + persona[0]] +  history + [response + ([eos] if self.with_eos else [])] # persona one utterance
         sequence = [sequence[0]] + [[speaker1 if (len(sequence)-i) % 2 else speaker2] + s for i, s in enumerate(sequence[1:])]
 
         # truncate
@@ -297,8 +309,10 @@ class MSDataset(Dataset):
         # TODO: whether need to add bos for token_type_ids
         instance["token_type_ids"] = [bg_token for _ in sequence[0]]  + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
         # instance["token_type_ids"] = [bos] + [topic_token for _ in sequence[0][1:]] + [persona_token for _ in sequence[1]]  + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[2:]) for _ in s]
+        
+        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] # response + eos + pad
+        
         # instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
-        instance["lm_labels"] = ([self.pad] * sum(len(s) for s in sequence[:-1])) + [self.pad] + sequence[-1][1:] 
 
         
         instance["index"] = index
@@ -369,12 +383,13 @@ class MSDataset(Dataset):
             batch_first=self.batch_first, padding_value=self.pad)
         labels = pad_sequence(
             [torch.tensor(instance["lm_labels"], dtype=torch.long) for instance in batch],
-            batch_first=self.batch_first, padding_value=self.pad)
+            batch_first=self.batch_first, padding_value=-1)
         attention_masks_2d = pad_sequence(
             [torch.tensor(instance["attention_masks_2d"], dtype=torch.long) for instance in batch],
             batch_first=self.batch_first, padding_value=0)
         indexes = torch.Tensor([torch.tensor(instance["index"], dtype=torch.long) for instance in batch])
 
+        target_ids = torch.Tensor([torch.tensor(instance["target"], dtype=torch.long) for instance in batch]) if not self.lm_labels else None
 
 
         kg_pad_ids, kg_memory_mask, kg_pad_kn_num = None, None, None
@@ -386,5 +401,5 @@ class MSDataset(Dataset):
             kg_pad_kn_num = torch.tensor(kg_pad_kn_num, dtype=torch.long)
 
 
-        return input_ids, token_type_ids, labels, indexes, attention_masks_2d, \
+        return input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
                                                 kg_pad_ids, kg_memory_mask, kg_pad_kn_num

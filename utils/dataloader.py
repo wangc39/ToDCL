@@ -246,11 +246,11 @@ def get_data_loaders(args, tokenizer, test=False):
     for task_id, dataset_task in datasets["test"].items():
         temp_list.append(dataset_task)
     test_datasets = sum(temp_list,[])
-    testMSDatasets = MSDataset(test_datasets, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys()) + "_test")
+    testMSDatasets = MSDataset(test_datasets, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys()) + "_test", lm_labels=False, with_eos=False)
     test_loaders = DataLoader(
         DatasetTrain(sum(temp_list,[])), 
-        batch_size=args.valid_batch_size, 
-        collate_fn=testMSDatasets.collate,
+        batch_size=args.test_batch_size, # test_batch_size = 1
+        collate_fn=testMSDatasets.collate, # unless to get padding result
         num_workers=args.num_workers,
         shuffle=False)
 

@@ -1,6 +1,13 @@
 from transformers import GPT2PreTrainedModel
 from transformers import GPT2Model, GPT2Tokenizer, GPT2PreTrainedModel
-from adapterGPT2 import CausalLMOutputWithPast
+import torch
+import torch.utils.checkpoint
+from torch import nn
+from torch.nn import CrossEntropyLoss, MSELoss
+
+
+from model.adapterGPT2 import CausalLMOutputWithPast
+
 
 
 class GPT2LMHeadModel(GPT2PreTrainedModel):
@@ -110,8 +117,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            adapter_names=adapter_names,
+            return_dict=return_dict
         )
 
         hidden_states = transformer_outputs[0]
