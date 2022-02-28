@@ -97,24 +97,9 @@ def get_e2e_from_dial(args,data,task_id,tokenizer):
         input()
     return dialogues
 
-
+# TODO: get_current_task_data
 def get_current_task_data(args,dataset_dic,task_id,number_of_sample):
-    temp_aug = random.sample(dataset_dic,min(number_of_sample,len(dataset_dic)))
-    aug_data = []
-    cnt_API = 0
-    for d in temp_aug:
-        ## add a first token for the generation
-        if(args.task_type=="E2E"):
-            if(d["spk"]=="API"):
-                cnt_API += 1
-                d["history_reply"] = f"[{str(eval(task_id)[0])}-API]"+d["history_reply"]
-            else:
-                d["history_reply"] = f"[{str(eval(task_id)[0])}]"+d["history_reply"]
-        else:
-            d["history_reply"] = f"[{str(eval(task_id)[0])}]"+d["history_reply"]
-        aug_data.append(d)
-    return aug_data
-
+    pass
 
 def collate_fn(data,tokenizer):
     batch_data = {}
@@ -158,11 +143,11 @@ def collate_fn_GPT2(data, tokenizer):
 
 def make_loader(args, tokenizer, origin_dataset, extra_dataset=None, cur_task=None):
 
-    datasets = MSDataset(origin_dataset, tokenizer, extra_data=extra_dataset, cur_task=task_id+"_train")
+    datasets = MSDataset(origin_dataset, tokenizer, extra_data=extra_dataset, cur_task=cur_task+"_train")
     dataloader = DataLoader(
         datasets, 
         batch_size=args.train_batch_size, 
-        collate_fn=trainMSDatasets.collate,
+        collate_fn=datasets.collate,
         num_workers=args.num_workers,
         shuffle=True)
 

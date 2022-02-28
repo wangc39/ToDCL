@@ -35,9 +35,9 @@ def get_checkpoint(log_dir, index_to_load):
 
 def train(hparams, *args):
     if(hparams.CL == "ADAPTER"):
-        hparams.saving_dir = f"runs_{hparams.task_type}/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+        hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
     else:
-        hparams.saving_dir = f"runs_{hparams.task_type}/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+        hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
     if(hparams.CL == "MULTI"): 
         hparams.multi = True
         hparams.continual = False
@@ -67,20 +67,20 @@ def train(hparams, *args):
     if(hparams.CL == "GEM"): model.set_up_gem()
 
     if hparams.multi:
-        # start = time.time()
-        # trainer = Trainer(
-        #         default_root_dir=hparams.saving_dir,
-        #         accumulate_grad_batches=hparams.gradient_accumulation_steps,
-        #         gradient_clip_val=hparams.max_norm,
-        #         max_epochs=hparams.n_epochs,
-        #         callbacks=[pl.callbacks.EarlyStopping(monitor='val_loss',min_delta=0.00, patience=5,verbose=False, mode='min')],
-        #         gpus=[0],
-        #         )
-        # trainer.fit(model, train_loader, val_loader)
-        # end = time.time()
-        # print ("Time elapsed:", end - start)
-        # model.model.save_pretrained(f'{hparams.saving_dir}')
-        # model.tokenizer.save_pretrained(f'{hparams.saving_dir}')
+        start = time.time()
+        trainer = Trainer(
+                default_root_dir=hparams.saving_dir,
+                accumulate_grad_batches=hparams.gradient_accumulation_steps,
+                gradient_clip_val=hparams.max_norm,
+                max_epochs=hparams.n_epochs,
+                callbacks=[pl.callbacks.EarlyStopping(monitor='val_loss',min_delta=0.00, patience=5,verbose=False, mode='min')],
+                gpus=[0],
+                )
+        trainer.fit(model, train_loader, val_loader)
+        end = time.time()
+        print ("Time elapsed:", end - start)
+        model.model.save_pretrained(f'{hparams.saving_dir}')
+        model.tokenizer.save_pretrained(f'{hparams.saving_dir}')
         test_model_seq2seq(hparams, model.model, model.tokenizer, dev_val_loader, time=f"FINAL")
     elif hparams.continual:
         for task_num, (task_id, task_loader) in enumerate(train_loader.items()):
@@ -226,7 +226,7 @@ if __name__ == '__main__':
     parser.add_argument("--reg", type=float, default=0.01, help="CL regularization term")
     parser.add_argument("--episodic_mem_size", type=int, default=100, help="number of batch/sample put in the episodic memory")
     #  options=["E2E","DST","NLG","INTENT"]
-    parser.add_argument('--task_type', type=str, default="NLG")
+    # parser.add_argument('--task_type', type=str, default="NLG")
     #  options=["VANILLA"]
     parser.add_argument('--CL', type=str, default="MULTI")
     # options=[1,2,3,4,5]

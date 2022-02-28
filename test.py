@@ -78,7 +78,7 @@ def get_example_inputs(model,tokenizer,prompt_text,device):
     return input_ids.to(device), attention_mask.to(device), position_ids.to(device), empty_past
 
 
-def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, target_ids, device, do_sample=False, \
+def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, target_ids, device, do_sample=True, \
                             temperature=1.0,  top_k=0, top_p=0, max_length=30, responses_generate_times=5, repetition_penalty=1.0, task_id=-1):
     
     
@@ -395,7 +395,7 @@ def get_args():
     parser.add_argument("--reg", type=float, default=0.01, help="CL regularization term")
     parser.add_argument("--episodic_mem_size", type=int, default=100, help="number of batch/sample put in the episodic memory")
     #  options=["E2E","DST","NLG","INTENT"]
-    parser.add_argument('--task_type', type=str, default="NLG")
+    # parser.add_argument('--task_type', type=str, default="NLG")
     #  options=["VANILLA"]
     parser.add_argument('--CL', type=str, default="MULTI")
     # options=[1,2,3,4,5]

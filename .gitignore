@@ -11,4 +11,5 @@ data/dstc8-schema-guided-dialogue
 data/multiwoz
 runs*
 Learning
+outputs
 .vscode

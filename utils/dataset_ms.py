@@ -390,11 +390,13 @@ class MSDataset(Dataset):
         indexes = torch.Tensor([torch.tensor(instance["index"], dtype=torch.long) for instance in batch])
 
         # target_ids = torch.Tensor([torch.tensor(instance["target"], dtype=torch.long) for instance in batch]) if not self.lm_labels else None
-        
-        # target_ids = [torch.tensor(instance["target"], dtype=torch.long) for instance in batch] if not self.lm_labels else None
-        target_ids = pad_sequence(
+    
+        target_ids = None # for test dataloader
+        if not self.lm_labels:
+            target_ids = pad_sequence(
             [torch.tensor(instance["target"], dtype=torch.long) for instance in batch],
             batch_first=self.batch_first, padding_value=-1) # 默认情况下是不会发生pad的 而且只在test情况下使用
+        
 
         kg_pad_ids, kg_memory_mask, kg_pad_kn_num = None, None, None
         if has_kg:
