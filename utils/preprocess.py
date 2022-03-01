@@ -14,6 +14,20 @@ from data.preprocess_main import PreprocessMain
 def get_n_turns(data):
     # len_dialogue = []
     # len_dialogue.append(len([0 for dia in data for t in dia["utterances"]]))
+    # print(type(data), data)
+    # for index, dia in enumerate(data):
+    #     try:
+    #         s = len(dia["utterances"][-1]["history"]), len(dia["utterances"][-1]["candidates"])
+    #     except TypeError as e:
+    #         # print("{}\t{}".format(e, dia["utterances"][-1]["candidates"]))
+    #         print(e)
+    #         print(index)
+    #         # print('dia', dia)
+    #         # print('dia["utterances"]', dia["utterances"])
+    #         # print(dia["utterances"][-1])
+    #         # print("{}\t{}".format(e, dia["utterances"][-1]))
+
+    #         exit(1)
     len_dialogue = [(len(dia["utterances"][-1]["history"]) + len(dia["utterances"][-1]["candidates"])) for dia in data]
 
     return np.mean(len_dialogue)
@@ -79,6 +93,8 @@ def get_datasets(dataset_list=['SGD'], setting="single", verbose=False, develop=
         print("LOAD Convai2")
         # train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
         train_Convai2, dev_Convai2, test_Convai2 = preprocessMain.process_convai2(develop=develop)
+        print("train_Convai2", type(train_Convai2), len(train_Convai2))
+        print("---------")
 
         if(verbose):
             print_sample(train_Convai2,2)

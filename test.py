@@ -402,22 +402,33 @@ def get_args():
     parser.add_argument('--seed', default=42, type=int)
 
 
-    hyperparams = parser.parse_args()
+    hparams = parser.parse_args()
+
+    if(hparams.CL == "ADAPTER"):
+        hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+    else:
+        hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+    if(hparams.CL == "MULTI"): 
+        hparams.multi = True
+        hparams.continual = False
+    else: 
+        hparams.multi = False
+        hparams.continual = True
 
 
-    return hyperparams
+    return hparams
 
 
 def test():
     # pass
     args = get_args()
     model = Seq2SeqToD(args)
-    saving_dir = r"runs/Ed,Wow,Daily/EWC_EM_100_LAMOL_0.2_REG_0.01_PERM_42_gpt2/"
-    model_dir = os.path.join(saving_dir, "pytorch_model.bin")
-    tokenizer_dir = os.path.join(saving_dir, "tokenizer_config.json")
+    args.saving_dir = r"runs/Ed,Wow,Daily/EWC_EM_100_LAMOL_0.2_REG_0.01_PERM_42_gpt2/"
+    model_dir = os.path.join(args.saving_dir, "pytorch_model.bin")
+    tokenizer_dir = os.path.join(args.saving_dir, "tokenizer_config.json")
 
     model.model.load_state_dict(torch.load(model_dir))
-    model.tokenizer.from_pretrained(saving_dir)
+    model.tokenizer.from_pretrained(args.saving_dir)
 
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

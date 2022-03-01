@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 
-SPECIAL_TOKENS = {"Convai2": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]" ],
+SPECIAL_TOKENS = {"Convai": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]" ],
                   "Daily": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"], 
                   "Ed": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]" ],
                   "Wow": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"],
@@ -19,7 +19,7 @@ SPECIAL_TOKENS = {"Convai2": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg
 ATTR_TO_SPECIAL_TOKEN = {'pad_token': '[PAD]', 'unk_token': '[unk]',
                     'additional_special_tokens': 
                     ("[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]", 
-                    "Convai2", "[Ed]", "[Cornell]", "[Ubuntu]", "[Daily]", "[Wow]")} # add for task name
+                    "[Convai]", "[Ed]", "[Cornell]", "[Ubuntu]", "[Daily]", "[Wow]")} # add for task name
 
 
 class MSDataset(Dataset):
@@ -95,10 +95,10 @@ class MSDataset(Dataset):
         if self.data[index]["dataset"]:
             self.cur_task = re.sub(r"[^a-zA-Z]", "", self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"])[0])
 
-        # print(type(self.cur_task), self.cur_task)
+        print(type(self.cur_task), self.cur_task)
         # self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
         
-        if self.cur_task == "Convai2":
+        if self.cur_task == "Convai":
             # TODO: add speaker1 and speaker2 to one list
             # to get speaker1 and speaker2
             speaker1 = self.data[index]["speaker1"].copy() # four utterances shape: [[], [], [], []]

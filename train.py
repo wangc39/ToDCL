@@ -206,8 +206,13 @@ if __name__ == '__main__':
     parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
     parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily,Cornell", help="Path for saving")
-    parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
+
+    # parser.add_argument("--dataset_list", type=str, default="Ubuntu,Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
+    # parser.add_argument("--dataset_list", type=str, default="Convai2", help="Path for saving")
+    parser.add_argument("--dataset_list", type=str, default="Ubuntu", help="Path for saving")
+
+
+    # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
 
     parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")

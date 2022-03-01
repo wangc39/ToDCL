@@ -1,9 +1,10 @@
-
 import os, json, codecs, csv
 import codecs
 import random
 import string
 import copy
+
+import numpy as np
 
 
 class PreprocessMain:
@@ -136,8 +137,9 @@ class PreprocessMain:
 
                     if instance["utterances"]: 
                         outputs[mode].append(instance)
-
-        return outputs
+        
+        train_data, dev_data, test_data = outputs["train"], outputs["valid"], outputs["test"]
+        return train_data, dev_data, test_data
 
     def process_convai2(self, develop=False):
 
@@ -157,7 +159,7 @@ class PreprocessMain:
 
 
             instance = {}
-            instance["dataset"] = "[Convai2]"
+            instance["dataset"] = "[Convai]"
             instance["dialogue_id"] = dialogues_id
             instance["speaker1"] = copy.deepcopy(your_persona) 
             instance["speaker2"] = copy.deepcopy(partner_persona)
@@ -253,6 +255,7 @@ class PreprocessMain:
         data = train + vaild
 
         train_data, dev_data, test_data = np.split(data, [int(len(data)*0.7), int(len(data)*0.8)])
+        train_data, dev_data, test_data = train_data.tolist(), dev_data.tolist(), test_data.tolist() # from numpy to list
 
         return train_data, dev_data, test_data
 
