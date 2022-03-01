@@ -170,7 +170,7 @@ def train(hparams, *args):
                     for _, batch in enumerate(model.episodic_mem[task_id]):
                         model.model.zero_grad()
 
-                        input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+                        input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                                     kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
 
                         (loss), *_ = model.model(input_ids=input_ids,
@@ -207,9 +207,9 @@ if __name__ == '__main__':
     parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
 
-    # parser.add_argument("--dataset_list", type=str, default="Ubuntu,Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
+    parser.add_argument("--dataset_list", type=str, default="Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
     # parser.add_argument("--dataset_list", type=str, default="Convai2", help="Path for saving")
-    parser.add_argument("--dataset_list", type=str, default="Ubuntu", help="Path for saving")
+    # parser.add_argument("--dataset_list", type=str, default="Ubuntu", help="Path for saving")
 
 
     # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")

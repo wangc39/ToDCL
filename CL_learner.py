@@ -90,7 +90,7 @@ class Seq2SeqToD(pl.LightningModule):
             dev = next(self.model.parameters()).device
             for id_task, (_,task_memory) in enumerate(self.episodic_mem.items()):
                 batch_mem =  sample(task_memory,1)[0] # ==> we sample one batch from episodic memory
-                input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+                input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                             kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch_mem)
                 self.model.zero_grad()
                 # (loss), *_ = self.model(input_ids=batch_mem["encoder_input"].to(dev),
@@ -110,7 +110,7 @@ class Seq2SeqToD(pl.LightningModule):
             # parameters返回一个模型参数的迭代器 实际上就是模型的参数的第一个对应的device
             dev = next(self.model.parameters()).device 
             batch_mem = sample(self.episodic_mem["all"],1)[0] # ==> we sample one batch from episodic memory
-            input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+            input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                                 kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch_mem)
             self.model.zero_grad()
 
@@ -128,7 +128,7 @@ class Seq2SeqToD(pl.LightningModule):
             self.model.zero_grad()
 
 
-        input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+        input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
             kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
             # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(self.device) for input_tensor in batch)
 
@@ -140,7 +140,7 @@ class Seq2SeqToD(pl.LightningModule):
                                 input_ids=input_ids,
                                 token_type_ids=token_type_ids,
                                 labels=labels,
-                                task_id=self.task_list_seen.index(batch["task_id"][0])
+                                task_id=self.task_list_seen.index(taskname)
                                 )
         else:
             (loss), *_ = self.model(input_ids=input_ids,
@@ -203,7 +203,7 @@ class Seq2SeqToD(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
 
-        input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+        input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
         kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
         # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor.to(self.device) for input_tensor in batch)
 
@@ -212,7 +212,7 @@ class Seq2SeqToD(pl.LightningModule):
                                 token_type_ids=token_type_ids,
                                 attention_mask=attention_masks_2d,
                                 labels=labels,
-                                task_id=self.task_list_seen.index(batch["task_id"][0])
+                                task_id=self.task_list_seen.index(taskname)
                                 )
         else:
             # print(input_ids.size())

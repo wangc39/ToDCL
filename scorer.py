@@ -1,6 +1,7 @@
 import re
 import json
 from utils.eval_metric import moses_multi_bleu
+from utils.f1_metrics import F1Metrics
 from collections import defaultdict
 from argparse import ArgumentParser
 import numpy as np
@@ -9,78 +10,9 @@ import glob
 import os.path
 from tqdm import tqdm
 from dictdiffer import diff
+from transformers import GPT2Tokenizer
 
 
-def parse_API(text):
-    API = defaultdict(lambda:defaultdict(str))
-    for function in text.split(") "):
-        if(function!=""):
-            if("(" in function and len(function.split("("))==2):
-                intent, parameters = function.split("(")
-                parameters = sum([s.split('",') for s in parameters.split("=")],[])
-                if len(parameters)>1:
-                    if len(parameters) % 2 != 0:
-                        parameters = parameters[:-1]
-
-                    for i in range(0,len(parameters),2):
-                        API[intent][parameters[i]] = parameters[i+1].replace('"',"")
-
-                if(len(API)==0): API[intent]["none"] = "none"
-    return API
-
-def evaluate_INTENT(pred,gold,domain):
-    intent_accuracy = []
-    for p, g in zip(pred,gold):
-        if(p.split("  ")[0].strip() == g.replace("[eos]","").strip()):
-            intent_accuracy.append(1)
-        else:
-            intent_accuracy.append(0)
-    return {"intent_accuracy":np.mean(intent_accuracy),
-            "turn_level_slot_acc":0,
-            "turn_level_joint_acc":0}
-
-
-def evaluate_API(pred,gold):
-    intent_accuracy = []
-    turn_level_slot_acc = []
-    turn_level_joint_acc = []
-    for p, g in zip(pred,gold):
-        API_G = {}
-        API_P = {}
-        p = p+" "
-        if(g!=""):
-            API_G = parse_API(g)
-            # print(API_G)
-            if(p!="" and "(" in p and ")"): ## means the predicted text is an API
-                API_P = parse_API(p)
-                if len(API_G.keys()) != 1: 
-                    continue
-                if len(API_P.keys()) != 1: 
-                    turn_level_joint_acc.append(0)
-                    continue
-                # intent accuracy
-                intent_G = list(API_G.keys())[0]
-                intent_P = list(API_P.keys())[0]
-                if(intent_G==intent_P):
-                    intent_accuracy.append(1)
-                else:
-                    intent_accuracy.append(0)
-
-                state_G = {s:v for s,v in API_G[intent_G].items() if s !="none"}
-                state_P = {s:v for s,v in API_P[intent_P].items() if s !="none"}
-                
-                if(len([d for d in diff(state_G,state_P)])==0):
-                    turn_level_joint_acc.append(1)
-                else:
-                    turn_level_joint_acc.append(0)
-
-            else:
-                intent_accuracy.append(0)
-                turn_level_joint_acc.append(0)
-                turn_level_slot_acc.append(0)
-
-    return {"intent_accuracy":np.mean(intent_accuracy),
-            "turn_level_joint_acc":np.mean(turn_level_joint_acc)}
 
 
 def evaluate_EER(args,results_dict,entities_json,path, names):
@@ -113,68 +45,83 @@ def evaluate_EER(args,results_dict,entities_json,path, names):
 
 
 
+def compute_bleu(hyp_text, ref_text):
 
-def evaluate(args,path,names,ent={}):
-    results_json = json.load(open(path))
-    entities_json = ent
-    acc = 0
-    if("ADAPTER" in path):
-        acc = []
-        for r in results_json:
+    hyp_text_array = np.array(hyp_text)
+    BLEU_list = []
+    print('Calculating BLEU...')
 
-            ts_id_gold = names.index(eval(r['task_id'])[0])
-            if(ts_id_gold == r['pred_task_id']):
-                acc.append(1)
-            else:
-                acc.append(0)
-        acc = np.mean(acc)
-        # print("ACC:",np.mean(acc))
+    for i in range(len(hyp_text_array[0])):
 
+        BLEU = moses_multi_bleu(np.array(hyp_text[:, i]),np.array(ref_text))
+        BLEU_list.append(BLEU)
 
+    return np.mean(np.array(BLEU_list))
 
-    domain_BLEU = defaultdict(lambda: defaultdict(list))
-    domain_API = defaultdict(lambda: defaultdict(list))
-    domain_NLG = defaultdict(list)
-    for r in results_json:
-        if(r['spk']=='SYSTEM'):
-            domain_BLEU[r['task_id']]["pred"].append(r['genr'].strip())
-            domain_BLEU[r['task_id']]["gold"].append(r['gold'].replace("[eos]","").strip())
-            domain_NLG[r['task_id']].append(r)
-        elif(r['spk']=='API'):
-            domain_API[r['task_id']]["pred"].append(r['genr'])
-            domain_API[r['task_id']]["gold"].append(r['gold'])
+def compute_f1(hyp_word_list, ref_word_list):
+    f1_scorer = F1Metrics()
+    print('Calculating F1...')
+    # f1 = f1_scorer.calculate_metrics([' '.join(item) for item in hyp_word_list], [' '.join(item[0]) for item in ref_word_list])
+    avg_f1, max_f1 = f1_scorer.calculate_metrics(hyp_word_list, ref_word_list)
+    # task_metrics_dict[cur_test_task_id][cur_train_task_id]["F1-A"] = round(avg_f1*100, 2)
+    # task_metrics_dict[cur_test_task_id][cur_train_task_id]["F1-M"] = round(max_f1*100, 2)
 
-    T_BLEU = {}
-    T_NLG = {}
-    if args.task_type =="NLG" or args.task_type =="E2E":
-        for k, sample_NLG in domain_NLG.items():
-            T_NLG[k] = evaluate_EER(args,sample_NLG,entities_json, path, names)
-        for k,v in domain_BLEU.items():
-            T_BLEU[k] = moses_multi_bleu(v["pred"],v["gold"])
-
-    T_API = {}
-    for k,v in domain_API.items():
-        if args.task_type =="NLG":
-            T_API[k] = 0
-        if args.task_type =="INTENT":
-            T_API[k] = evaluate_INTENT(v["pred"],v["gold"],domain="")
-        if args.task_type =="E2E" or args.task_type =="DST":
-            T_API[k] = evaluate_API(v["pred"],v["gold"])
-
-    return {"API":T_API, "BLEU":T_BLEU, "EER":T_NLG, "ACC":acc}
+    return round(avg_f1*100, 2)
 
 
-perm1 = {0:"['sgd_travel']",1:"['sgd_payment']",2:"['TMA_restaurant']",3:"['TMB_music']",4:"['sgd_ridesharing']",5:"['TMA_auto']",6:"['sgd_music']",7:"['sgd_buses']",8:"['TMB_restaurant']",9:"['MWOZ_attraction']",10:"['TMB_sport']",11:"['sgd_movies']",12:"['sgd_homes']",13:"['TMA_coffee']",14:"['sgd_restaurants']",15:"['sgd_hotels']",16:"['sgd_weather']",17:"['sgd_trains']",18:"['MWOZ_train']",19:"['sgd_flights']",20:"['sgd_media']",21:"['MWOZ_taxi']",22:"['sgd_alarm']",23:"['TMA_movie']",24:"['sgd_banks']",25:"['TMA_pizza']",26:"['TMB_flight']",27:"['sgd_rentalcars']",28:"['TMB_movie']",29:"['sgd_events']",30:"['MWOZ_restaurant']",31:"['sgd_services']",32:"['sgd_calendar']",33:"['TMB_food-ordering']",34:"['MWOZ_hotel']",35:"['TMA_uber']",36:"['TMB_hotel']"}
-perm1 = {eval(v)[0]: k for k, v in perm1.items()}
+def load_data(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False):
+    hyp_word_list = []
+    ref_word_list = []
+
+    
+    # hyp_word_list:  [[['I', 'love', 'food'], ['Do', 'you', 'like', '?']], [['my', 'name']]] # use punctuation as a word
+    with open(hyp_file_path, 'r') as f:
+        hyp_data = f.readlines()
+        hyp_words = [line.split("|||") for line in hyp_data]
+        if nltk_choose:
+            # use nltk to get word tokens
+            hyp_word_list = [[nltk.word_tokenize(s) for s in line.split("|||")] for line in hyp_data]
+        else:
+            # gpt2 tokenizer
+            # "Using a Transformer network is simple." --> ['Using', 'Ġa', 'ĠTrans', 'former', 'Ġnetwork', 'Ġis', 'Ġsimple', '.']
+            hyp_word_list = [[tokenizer.tokenize(s) for s in line.split("|||")] for line in hyp_data]
+
+    # ref_word_list:   [[['I', 'love', 'food']], [['Do', 'you', 'like', '?']]] # use punctuation as a word
+    with open(ref_file_path, 'r') as f:
+        ref_data = f.readlines()
+        ref_word = [line.split("\n") for line in ref_data]
+
+        if nltk_choose:
+            ref_word_list = [[nltk.word_tokenize(line)] for line in ref_data] # inorder to keep same format
+        else:
+            ref_word_list = [[tokenizer.tokenize(line)] for line in ref_data] # inorder to keep same format
+
+
+    return hyp_word_list, ref_word_list, hyp_word, ref_word
+
+
+def evaluate(hyp_file, ref_file, tokenizer, nltk_choose=args.nltk):
+
+    hyp_word_list, ref_word_list, hyp_word, ref_word = load_data(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False)
+
+    bleu = compute_bleu(hyp_word, ref_word)
+    f1_score = compute_f1(hyp_word_list, ref_word_list)
+
+    return bleu, f1_score
+
+
 
 def score_folder():
 
     parser = ArgumentParser()
     parser.add_argument("--model_checkpoint", type=str, default="", help="Path to the folder with the results")
-    parser.add_argument("--task_type", type=str, default="E2E", help="Path to the folder with the results")
+    parser.add_argument("--nltk", type=bool, default=False, help="Path to the folder with the results")
+
     
     args = parser.parse_args()
-    folders = glob.glob(f"{args.model_checkpoint}/*")
+    # args.task_type = "NLG"
+    folders = glob.glob(f"{args.model_checkpoint}/*") # 获取model_checkpoint的文件夹的名称
+
 
     # entities_j = json.load(open("data/entities_SGD,TM19,TM20,MWOZ.json"))
     # integers = [str(i) for i in range(100)]
@@ -183,28 +130,22 @@ def score_folder():
     #     for slot, values in v.items():
     #         entities_json[k][slot] = set([val.lower() for val in values if v not in integers])
 
-    names = list(perm1.keys())
+    # names = list(perm1.keys())
     RESULT = []
     for folder in folders:
         if "png" in folder or "TOO_HIGH_LR" in folder or "TEMP" in folder:
             continue
-        res = evaluate(args,f'{folder}/FINAL/generated_responses.json',names)#, ent=entities_json)
-        if(args.task_type == "INTENT"):
-            INTENT = np.mean([v["intent_accuracy"] for k,v in res["API"].items()])
-            RESULT.append({"Name":folder.split("/")[-1].split("_")[0],"INTENT":INTENT})
-        elif(args.task_type == "DST"):
-            JGA = np.mean([v["turn_level_joint_acc"] for k,v in res["API"].items()])
-            RESULT.append({"Name":folder.split("/")[-1].split("_")[0],"JGA":JGA})
-        elif(args.task_type == "NLG"):
-            BLEU = np.mean([v for k,v in res["BLEU"].items()])
-            EER = np.mean([v for k,v in res["EER"].items()])
-            RESULT.append({"Name":folder.split("/")[-1].split("_")[0],"BLEU":BLEU,"EER":EER})
-        elif(args.task_type == "E2E"):
-            INTENT = np.mean([v["intent_accuracy"] for k,v in res["API"].items()])
-            JGA = np.mean([v["turn_level_joint_acc"] for k,v in res["API"].items()])
-            BLEU = np.mean([v for k,v in res["BLEU"].items()])
-            EER = np.mean([v for k,v in res["EER"].items()])
-            RESULT.append({"Name":folder.split("/")[-1].split("_")[0],"INTENT":INTENT,"JGA":JGA,"BLEU":BLEU,"EER":EER})
+
+        hyp_file = f'{folder}/FINAL/result.json'
+        ref_file = f'{folder}/FINAL/gt.txt'
+
+        # tokenizer = tokenizer.from_pretrained(args.saving_dir)
+        tokenizer = GPT2Tokenizer.from_pretrained(folder, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
+
+        BLEU, F1 = evaluate(hyp_file, ref_file, tokenizer, nltk_choose=args.nltk)#, ent=entities_json)
+
+
+        RESULT.append({"Name":folder.split("/")[-1].split("_")[0],"BLEU":BLEU,"F1":F1})
 
     print(tabulate(RESULT, headers="keys",tablefmt="github"))
 

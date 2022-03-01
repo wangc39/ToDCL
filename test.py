@@ -78,36 +78,38 @@ def get_example_inputs(model,tokenizer,prompt_text,device):
     return input_ids.to(device), attention_mask.to(device), position_ids.to(device), empty_past
 
 
-def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, target_ids, device, do_sample=True, \
+def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, target_ids, device, current_output=None, do_sample=False, \
                             temperature=1.0,  top_k=0, top_p=0, max_length=30, responses_generate_times=5, repetition_penalty=1.0, task_id=-1):
     
     
-    
-    # eos_token_id = tokenizer.eos_token_id
-
     task_name = list(SPECIAL_TOKENS.keys())[0] if task_id == -1 else SPECIAL_TOKENS[task_id]
     special_tokens_ids = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[task_name])
     bos, eos, speaker1, speaker2, bg_token = special_tokens_ids
 
-    # if current_output is None:
-    current_output = []
+    if current_output is None:
+        current_output = []
     finish_set = set()
 
+    # repeat the tensor
+    input_ids = [copy.deepcopy(input_ids.squeeze(0).numpy().tolist()) for _ in range(responses_generate_times)]
+    token_type_ids = [copy.deepcopy(token_type_ids.squeeze(0).numpy().tolist()) for _ in range(responses_generate_times)]
+    target_ids = [copy.deepcopy(target_ids.squeeze(0).numpy().tolist()) for _ in range(responses_generate_times)]
 
+    input_ids = torch.tensor(input_ids, dtype=torch.long, device=device)
+    token_type_ids = torch.tensor(token_type_ids, dtype=torch.long, device=device)
+    target_ids = torch.tensor(target_ids, dtype=torch.long, device=device)
 
-    input_ids = input_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
-    token_type_ids = token_type_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
-    target_ids = target_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
+    # this way, the storage space and gradient space is shared
+    # input_ids = input_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
+    # token_type_ids = token_type_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
+    # target_ids = target_ids.repeat(responses_generate_times, 1).to(device) # repeat the tensor
 
     # print("input_ids.shape", input_ids.shape)
     # print("token_type_ids.shape", token_type_ids.shape)
     # print("target_ids.shape", target_ids.shape)
 
-    # input_ids = torch.tensor(input_ids, dtype=torch.long, device=device)
-    # token_type_ids = torch.tensor(token_type_ids, dtype=torch.long, device=device)
-    # target_ids = torch.tensor(target_ids, dtype=torch.long, device=device)
 
-    for step in range(max_length):
+    for i in range(max_length):
 
         if task_id == -1:
             outputs = model(input_ids, token_type_ids=token_type_ids)
@@ -115,15 +117,17 @@ def test_generation_GPT2BATCH(model, tokenizer, input_ids, token_type_ids, targe
             outputs = model(input_ids,  token_type_ids=token_type_ids, task_id=task_id)
 
         logits = outputs[0][:, -1, :] # response logit
+
         for index in range(responses_generate_times):
             for token_id in set([token_ids[index] for token_ids in current_output]):
-                logits[index][token_id] /= repetition_penalty # repeat punishment default equal to 1.0
+                logits[index][token_id] /= repetition_penalty # repeat punishment default equal to 1.0    
+        
+        
         logits = logits / (temperature if temperature > 0 else 1.0)
         logits = _top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p) # batch size x vocab size
         probs = F.softmax(logits, dim=-1)
 
         # return index of probs according to probs    shape: batch size x 1(5 x 1)
-        # TODO: sample for data is OK, but greedy is wrong
         prev = torch.topk(probs, 1)[1] if do_sample else torch.multinomial(probs, 1) 
         
         for index, token_id in enumerate(prev[:, 0]):
@@ -214,7 +218,7 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
 
     for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader)):
         with torch.no_grad():
-            input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+            input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                                     kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
                                     # kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
 
@@ -244,8 +248,13 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
             # reply = tokenizer.decode(target_ids, skip_special_tokens=True)
             reply = convert_ids_to_outtext(tokenizer, target_ids)
             reply = reply[0] if isinstance(reply, list) else reply # if list, preservation the first element
-            gt_replys.append(reply[0])
+            gt_replys.append(reply)
             candidate_texts = convert_ids_to_outtext(tokenizer, candidate_responses)
+
+            # print(f"reply: ", reply)
+            # print(f"candidate_texts: ", candidate_texts)
+            # exit(1)
+
             predictions.append('|||'.join(candidate_texts))
 
 

@@ -14,6 +14,7 @@ SPECIAL_TOKENS = {"Convai": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]
                   "Daily": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"], 
                   "Ed": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]" ],
                   "Wow": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"],
+                  "Cornell": ["[bos]", "[eos]", "[speaker1]", "[speaker2]", "[bg]"],
                   }
 
 ATTR_TO_SPECIAL_TOKEN = {'pad_token': '[PAD]', 'unk_token': '[unk]',
@@ -95,7 +96,7 @@ class MSDataset(Dataset):
         if self.data[index]["dataset"]:
             self.cur_task = re.sub(r"[^a-zA-Z]", "", self.tokenizer.convert_ids_to_tokens(self.data[index]["dataset"])[0])
 
-        print(type(self.cur_task), self.cur_task)
+        # print(type(self.cur_task), self.cur_task)
         # self.cur_task = self.data[index]["dataset"] if self.data[index]["dataset"] else self.cur_task 
         
         if self.cur_task == "Convai":
@@ -146,10 +147,11 @@ class MSDataset(Dataset):
                 if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
 
 
-        elif self.cur_task == "Ubuntu" or self.cur_task == "cornell": # ubuntu and cornell task is same
+        elif self.cur_task == "Ubuntu" or self.cur_task == "Cornell": # ubuntu and cornell task is same
             for i, utterance in enumerate(self.data[index]["utterances"]):
                 history = utterance["history"][-(2*self.max_history + 1):]
                 candidate = utterance["candidates"][-1] if self.lm_labels else [] # only have one sentence
+                
                 instance = self.proprecess_ubuntu(index, history, candidate, self.tokenizer, task=self.cur_task)
                 if not self.lm_labels: instance["target"] = utterance["candidates"][-1] # add for data test
 
@@ -217,6 +219,7 @@ class MSDataset(Dataset):
 
         
         instance["index"] = index
+        instance["task"] = task
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
         
         instance["kg"] = persona # a list
@@ -248,6 +251,7 @@ class MSDataset(Dataset):
         assert len(instance["input_ids"]) <= self.max_seq_len
         
         instance["index"] = index
+        instance["task"] = task
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
 
         return instance
@@ -283,6 +287,7 @@ class MSDataset(Dataset):
 
         
         instance["index"] = index
+        instance["task"] = task
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
 
         instance["kg"] = prompt # two dim list
@@ -316,12 +321,47 @@ class MSDataset(Dataset):
 
         
         instance["index"] = index
+        instance["task"] = task
         instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
 
         instance["kg"] = persona # two dim
     
         return instance
- 
+
+
+    def proprecess_ubuntu(self, index, history, response, tokenizer, task):
+        bos, eos, speaker1, speaker2, bg_token = tokenizer.convert_tokens_to_ids(SPECIAL_TOKENS[task])
+        instance = {}
+        # No background information
+        sequence = [[bos] + [bg_token]] +  history + [response + ([eos] if self.with_eos else [])]
+        sequence = [sequence[0]] + [[speaker1 if (len(sequence)-i) % 2 else speaker2] + s for i, s in enumerate(sequence[1:])]
+
+        # truncate
+        truncate_first_turn = False
+        new_context_list = self._truncate_list(sequence[:-1], self.max_seq_len - self.max_response_len, truncate_first_turn=truncate_first_turn)
+        new_response = sequence[-1]
+        if len(new_response) > self.max_response_len:
+            new_response = new_response[ : self.max_response_len]
+        sequence = new_context_list + [new_response]
+
+
+        
+        instance["input_ids"] = list(chain(*sequence)) # concatenate input_ids
+        # TODO: whether need to add bos for token_type_ids
+        instance["token_type_ids"] = [bg_token for _ in sequence[0]]  + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[1:]) for _ in s]
+        # instance["token_type_ids"] = [bos] + [topic_token for _ in sequence[0][1:]] + [persona_token for _ in sequence[1]]  + [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence[2:]) for _ in s]
+        instance["lm_labels"] = ([-1] * sum(len(s) for s in sequence[:-1])) + [-1] + sequence[-1][1:] 
+        
+        instance["index"] = index
+        instance["task"] = task
+        instance["attention_masks_2d"] = [1]*len(instance["input_ids"])
+        
+        return instance
+
+
+
+
+
     def cal_max_len(self, ids): 
         """ calculate max sequence length """
         if isinstance(ids[0], list): 
@@ -396,7 +436,6 @@ class MSDataset(Dataset):
             target_ids = pad_sequence(
             [torch.tensor(instance["target"], dtype=torch.long) for instance in batch],
             batch_first=self.batch_first, padding_value=-1) # 默认情况下是不会发生pad的 而且只在test情况下使用
-        
 
         kg_pad_ids, kg_memory_mask, kg_pad_kn_num = None, None, None
         if has_kg:
@@ -406,6 +445,12 @@ class MSDataset(Dataset):
             kg_memory_mask = self.get_memory_mask(batch, "kg", kg_pad_kn_num).float().clone().detach().requires_grad_(True) # [batch, kg_pad_kn_num]
             kg_pad_kn_num = torch.tensor(kg_pad_kn_num, dtype=torch.long)
 
+        # taskname = [instance["task"] for instance in batch]
+        taskname =  batch[0]["task"] # when mutil training, the result is not true
 
-        return input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+        # # taskname = taskname if
+        # for index, instance in enumerate(batch):
+        #     if batch[index]["task"] != batch[0]["task"]:
+        #         taskname =  batch[0]["task"]
+        return input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                                                 kg_pad_ids, kg_memory_mask, kg_pad_kn_num

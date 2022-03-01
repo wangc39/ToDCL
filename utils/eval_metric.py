@@ -99,3 +99,8 @@ def test():
   BLEU = moses_multi_bleu(np.array([sent]),np.array([ref]))
   print(BLEU)
   BLEU = moses_multi_bleu(np.array([ref]),np.array([ref]))
+  print(BLEU)
+
+
+if __name__ == "__main__":
+    test()
