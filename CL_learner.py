@@ -90,22 +90,33 @@ class Seq2SeqToD(pl.LightningModule):
             dev = next(self.model.parameters()).device
             for id_task, (_,task_memory) in enumerate(self.episodic_mem.items()):
                 batch_mem =  sample(task_memory,1)[0] # ==> we sample one batch from episodic memory
+                input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+                            kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch_mem)
                 self.model.zero_grad()
-                (loss), *_ = self.model(input_ids=batch_mem["encoder_input"].to(dev),
-                    attention_mask=batch_mem["attention_mask"].to(dev) if "gpt2" not in self.model_name else None,
-                    labels=batch_mem["decoder_output"].to(dev)
+                # (loss), *_ = self.model(input_ids=batch_mem["encoder_input"].to(dev),
+                #     attention_mask=batch_mem["attention_mask"].to(dev) if "gpt2" not in self.model_name else None,
+                #     labels=batch_mem["decoder_output"].to(dev)
+                #     )
+
+                (loss), *_ = self.model(input_ids=input_ids.to(dev),
+                    token_type_ids=token_type_ids.to(dev),
+                    labels=labels.to(dev)
                     )
                 loss.backward()
                 store_grad(self.model.parameters, self.grads, self.grad_dims, id_task)
             self.model.zero_grad()
 
         elif(self.CL == "AGEM" and not self.first_task):
-            dev = next(self.model.parameters()).device
+            # parameters返回一个模型参数的迭代器 实际上就是模型的参数的第一个对应的device
+            dev = next(self.model.parameters()).device 
             batch_mem = sample(self.episodic_mem["all"],1)[0] # ==> we sample one batch from episodic memory
+            input_ids, token_type_ids, labels, target_ids, indexes, attention_masks_2d, \
+                                kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch_mem)
             self.model.zero_grad()
-            (loss), *_ = self.model(input_ids=batch_mem["encoder_input"].to(dev),
-                attention_mask=batch_mem["attention_mask"].to(dev) if "gpt2" not in self.model_name else None,
-                labels=batch_mem["decoder_output"].to(dev)
+
+            (loss), *_ = self.model(input_ids=input_ids.to(dev),
+                token_type_ids=token_type_ids.to(dev),
+                labels=labels.to(dev)
                 )
             loss.backward()
             grad_ref = []
@@ -126,14 +137,14 @@ class Seq2SeqToD(pl.LightningModule):
         ## LOSS ON CURRENT DATA
         if(self.CL == "ADAPTER"):
             (loss), *_ = self.model(
-                                input_ids=batch["encoder_input"],
-                                attention_mask=batch["attention_mask"],
-                                labels=batch["decoder_output"],
+                                input_ids=input_ids,
+                                token_type_ids=token_type_ids,
+                                labels=labels,
                                 task_id=self.task_list_seen.index(batch["task_id"][0])
                                 )
         else:
             (loss), *_ = self.model(input_ids=input_ids,
-                    attention_mask=attention_masks_2d,
+                    token_type_ids=token_type_ids,
                     labels=labels)
 
         if(self.CL == "AGEM" and not self.first_task):
@@ -157,6 +168,7 @@ class Seq2SeqToD(pl.LightningModule):
                         n_param = p.numel()  # number of parameters in [p]
                         p.grad.copy_(grad_proj[index:index+n_param].view_as(p))
                         index += n_param
+
         elif self.CL == "GEM" and not self.first_task:
             loss.backward()
             store_grad(self.model.parameters, self.grads, self.grad_dims, id_task+1)
@@ -197,6 +209,7 @@ class Seq2SeqToD(pl.LightningModule):
 
         if(self.CL == "ADAPTER"):
             (loss), *_ = self.model(input_ids=input_ids,
+                                token_type_ids=token_type_ids,
                                 attention_mask=attention_masks_2d,
                                 labels=labels,
                                 task_id=self.task_list_seen.index(batch["task_id"][0])
@@ -211,10 +224,10 @@ class Seq2SeqToD(pl.LightningModule):
             # print(batch["encoder_input"].size())
 
             (loss), *_ = self.model(input_ids=input_ids,
-                                attention_mask=attention_masks_2d,
                                 token_type_ids=token_type_ids,
+                                attention_mask=attention_masks_2d,
                                 labels=labels,
-                    )
+                                )
         self.log('val_loss', loss)
         return loss
 

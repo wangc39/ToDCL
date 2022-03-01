@@ -26,19 +26,19 @@ CUDA_VISIBLE_DEVICES=0 python train.py --CL VANILLA --task_type NLG
 ```
 Different CL methods uses different hyperparamters. For example, in REPLAY you can tune the episodic memory size as following: 
 ```
-CUDA_VISIBLE_DEVICES=0 python train.py --CL REPLAY --task_type NLG --episodic_mem_size 10
+CUDA_VISIBLE_DEVICES=0 python train.py --CL REPLAY --episodic_mem_size 10
 ```
 this will randomly sample 10 example per task, and replay it while learning new once. A full example to run the baseline is for example: 
 
 ```
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL MULTI 
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL VANILLA --n_epochs 1 
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL L2 --reg 0.01 --n_epochs 1 
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL EWC --reg 0.01 --n_epochs 1
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL AGEM --episodic_mem_size 100 --reg 1.0 --n_epochs 1
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL LAMOL --percentage_LAM0L 200 --n_epochs 1
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL REPLAY --episodic_mem_size 100 --n_epochs 1
-CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL ADAPTER --bottleneck_size 75 --lr 6.25e-3 --n_epochs 10 --n_epochs 1
+CUDA_VISIBLE_DEVICES=0 python train.py --CL MULTI 
+CUDA_VISIBLE_DEVICES=0 python train.py --CL VANILLA  
+CUDA_VISIBLE_DEVICES=0 python train.py --CL L2 --reg 0.01  
+CUDA_VISIBLE_DEVICES=0 python train.py --CL EWC --reg 0.01 
+CUDA_VISIBLE_DEVICES=0 python train.py --CL AGEM --episodic_mem_size 100 --reg 1.0 
+CUDA_VISIBLE_DEVICES=0 python train.py --CL LAMOL --percentage_LAM0L 200 
+CUDA_VISIBLE_DEVICES=0 python train.py --CL REPLAY --episodic_mem_size 100 
+CUDA_VISIBLE_DEVICES=0 python train.py --CL ADAPTER --bottleneck_size 75 --lr 6.25e-3 --n_epochs 10 
 ```
 
 
@@ -46,28 +46,25 @@ CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL ADAPTER --bottleneck
 
 ### Adapter
 ```
-python train.py --task_type E2E --CL ADAPTER --bottleneck_size 300 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
-python train.py --task_type INTENT --CL ADAPTER --bottleneck_size 50 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
-python train.py --task_type NLG --CL ADAPTER --bottleneck_size 50 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
-python train.py --task_type DST --CL ADAPTER --bottleneck_size 100 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
+python train.py --CL ADAPTER --bottleneck_size 300 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
+python train.py --CL ADAPTER --bottleneck_size 50 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
+python train.py --CL ADAPTER --bottleneck_size 50 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
+python train.py --CL ADAPTER --bottleneck_size 100 --lr 6.25e-3 --n_epochs 10 --train_batch_size 10 --gradient_accumulation_steps 8
 ```
 
 ### Replay
 ```
-python train.py --task_type E2E --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
-python train.py --task_type INTENT --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
-python train.py --task_type NLG --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
-python train.py --task_type DST --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
+python train.py --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
+python train.py --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
+python train.py --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
+python train.py --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --train_batch_size 8 --gradient_accumulation_steps 8
 ```
 
 
 ## Evaluation 
 
 ```
-python scorer.py --model_checkpoint runs_INTENT/BEST/ --task_type INTENT
-python scorer.py --model_checkpoint runs_DST/BEST/ --task_type DST
-python scorer.py --model_checkpoint runs_NLG/BEST/ --task_type NLG
-python scorer.py --model_checkpoint runs_E2E/BEST/ --task_type E2E
+python scorer.py --model_checkpoint runs
 ```
 
 ### Modularized
@@ -84,18 +81,20 @@ python scorer.py --model_checkpoint runs_E2E/BEST/ --task_type E2E
 | MULTI   | 0.875002  | 0.500357  | 26.1462  | 0.0341823 |
 
 
-### E2E
+### NLG
 
-| Name    |    INTENT |       JGA |     BLEU |      EER |
-|---------|-----------|-----------|----------|----------|
-| VANILLA | 0.0264631 | 0.0986375 |  6.45    | 0.499676 |
-| L2      | 0.0239718 | 0.069225  |  6.02459 | 0.553715 |
-| EWC     | 0.025299  | 0.101422  |  4.72    | 0.572742 |
-| AGEM    | 0.303349  | 0.109677  |  4.66216 | 0.651552 |
-| LAML    | 0.0269017 | 0.0939656 |  3.55622 | 0.638889 |
-| REPLAY  |  0.785325 | 0.297534  | 16.2668  | 0.190309 |
-| ADAPTER | 0.906857  | 0.35059   | 16.5768  | 0.331949 |
-| MULTI   | 0.954546  | 0.488995  | 23.6073  | 0.12558  |
+| Name    |     BLEU |       EER |
+|---------|----------|-----------|
+| MULTI   | 26.1462  | 0.0341823 |
+| VANILLA | 10.3032  | 0.181644  |
+| AGEM    |  4.61297 | 0.360167  |
+| L2      | 10.5389  | 0.189819  |
+| REPLAY  | 20.5041  | 0.0738263 |
+| ADAPTER | 21.7719  | 0.163975  |
+| EWC     |  9.65351 | 0.203158  |
+| LAML    |  3.49649 | 0.35664   |
+
+
 
 # Acknowledgement
 I would like to thanks [Saujas Vaduguru](saujas.vaduguru@mila.quebec), [Qi Zhu](zhuq96@gmail.com), and [Maziar Sargordi](maziar.sargordi@mila.quebec) for helping with debugging the code. 

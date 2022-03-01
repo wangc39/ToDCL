@@ -243,8 +243,8 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
 
             # reply = tokenizer.decode(target_ids, skip_special_tokens=True)
             reply = convert_ids_to_outtext(tokenizer, target_ids)
-
-            gt_replys.append(reply)
+            reply = reply[0] if isinstance(reply, list) else reply # if list, preservation the first element
+            gt_replys.append(reply[0])
             candidate_texts = convert_ids_to_outtext(tokenizer, candidate_responses)
             predictions.append('|||'.join(candidate_texts))
 
@@ -412,14 +412,17 @@ def test():
     # pass
     args = get_args()
     model = Seq2SeqToD(args)
-    saving_dir = r"runs_INTENT/BEST/ADAPTER_EPC_10_LR_0.00625_BOTL_100__gpt2/"
-    model.model.load_state_dict(torch.load(saving_dir))
+    saving_dir = r"runs/Ed,Wow,Daily/EWC_EM_100_LAMOL_0.2_REG_0.01_PERM_42_gpt2/"
+    model_dir = os.path.join(saving_dir, "pytorch_model.bin")
+    tokenizer_dir = os.path.join(saving_dir, "tokenizer_config.json")
+
+    model.model.load_state_dict(torch.load(model_dir))
     model.tokenizer.from_pretrained(saving_dir)
 
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    _, _, test_loader, (_, _) = get_data_loaders(args, model.tokenizer, test=True)
+    args.continual = True
+    _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
     # train_loader, val_loader, dev_val_loader, (train_datasets, test_datasets) = get_data_loaders(args, model.tokenizer)
 
     print(f"Loading Model: {args.model_checkpoint}")
@@ -427,8 +430,11 @@ def test():
 
     test_model_seq2seq(args, model.model, model.tokenizer, test_loader, time=f"FINAL")
 
+    # test_model_seq2seq(hparams,model.model,model.tokenizer,dev_val_loader,time=f"FINAL")
+
+
     # test_model(args,model,tokenizer,test_loader)
 
 if __name__ == "__main__":
-    # test()
+    test()
     pass

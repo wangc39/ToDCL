@@ -179,7 +179,7 @@ def get_data_loaders(args, tokenizer, test=False):
     print(f"Num of Tasks {len(aggregate['AllDatasets'].keys())}")
 
     task = defaultdict(lambda: defaultdict(str))
-    for split in ["train","dev","test"]:
+    for split in datasets.keys():
         for task_name, dataset_task in datasets[split].items():
             task[task_name][split] = len(dataset_task)
 
