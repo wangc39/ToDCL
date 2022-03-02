@@ -87,10 +87,10 @@ def train(hparams, *args):
         model.model.save_pretrained(f'{hparams.saving_dir}')
         model.tokenizer.save_pretrained(f'{hparams.saving_dir}')
 
-        for jj, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+        for jj, (cur_test_task) in enumerate(TASKS):
 
-            result_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_train_multi_test_{cur_test_task}_result.txt'
-            gt_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_train_multi_test_{cur_test_task}_gt.txt'
+            result_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_{cur_test_task}_train_multi_result.txt'
+            gt_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_{cur_test_task}_train_multi_gt.txt'
             test_model_seq2seq(hparams, model.model, model.tokenizer, dev_val_loader, result_path, gt_path)
     
     elif hparams.continual:
@@ -100,13 +100,11 @@ def train(hparams, *args):
  
             task_path = f'{hparams.saving_dir}/{task_num}_{task_id}'
 
-
             if(hparams.CL == "REPLAY"):
                 print(f"Memory Size {len(model.reply_memory)}")
                 # task_loader = make_loader(hparams,train_datasets[task_id]+model.reply_memory,model.tokenizer)
                 task_loader = make_loader(hparams, tokenizer=model.tokenizer, origin_dataset=train_datasets[task_id], \
                                                     extra_dataset=model.reply_memory, cur_task=task_id)
-
 
             # TODO LAMOL method
             if(hparams.CL == "LAMOL"):
@@ -207,7 +205,7 @@ def train(hparams, *args):
             model.tokenizer.save_pretrained(f'{task_path}')
 
             # for model test  
-            for jj, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+            for jj, (cur_test_task) in enumerate(TASKS[:(task_num+1)]):
                 result_path = f'{task_path}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_result.txt'
                 gt_path = f'{task_path}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_gt.txt'
                 if(hparams.CL == "ADAPTER"):

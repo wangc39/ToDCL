@@ -395,8 +395,6 @@ def get_args():
     return hparams
 
 
-# def test_all_files(args,model, tokenizer, test_loader, test_dataset, save_dir, max_seen_task=0):
-
 
 def test():
     # pass
@@ -405,66 +403,160 @@ def test():
 
     args.test_file_path = r"runs/Ed,Wow,Daily/"
     folders = glob.glob(f"{args.test_file_path}/*") # 获取 model_checkpoint 的文件夹的名称
-
-
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # load dataloader
+    model = Seq2SeqToD(hparams)
+    tokenizer = model.tokenizer
+
     args.multi, args.continual = False, True
-    _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
+    _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=tokenizer, test=True)
     TASKS = list(test_loader.keys())
 
     task_metrics_dict = {}
     for folder in folders:
         method_name = folder.split("/")[-1].split("_")[0] # get method name from folder path
-        if "MULTI" in folder:
-            result_path = f'{folder}/FINAL'+'/multiSkill_result.txt'
-            gt_path = f'{folder}/FINAL'+'/multiSkill_gt.txt'
-            if os.path.exists(result_path) and os.path.exists(gt_path): 
-                pass
-            else:
-                args.multi, args.continual = True, False
-                # load dataloader
-                _, _, all_test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
+        for index, (cur_train_task, tasks) in enumerate(test_loader.items()):
 
-                # load model and tokenizer
-                tokenizer_dir = os.path.join(folder, "tokenizer_config.json")
-                model.tokenizer.from_pretrained(folder)
-                # load train model
-                model_dir = os.path.join(folder, "pytorch_model.bin")
-                model.model.load_state_dict(torch.load(model_dir))
-                model.model.to(args.device)
+            if method_name == "MULTI":
+                cur_train_task = "multi"
+            task_metrics_dict[cur_train_task] = {}
+            for j, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+                print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
+                task_metrics_dict[cur_test_task][cur_train_task] = {}
 
-                test_model_seq2seq(args, model.model, model.tokenizer, test_loader, result_path, gt_path)
+                result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
+                gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
 
-            bleu, f1score = evaluate(hyp_file_path, ref_file_path, model.tokenizer, nltk_choose=False)
-            # task_metrics_dict["multi"][""]
-        else:
-            for index, (cur_train_task, tasks) in enumerate(test_loader.items()):
+                bleu, f1_score = evaluate(result_path, gt_path, tokenizer, nltk_choose=False)
+                task_metrics_dict[cur_test_task]["BLEU4"] = bleu
+                task_metrics_dict[cur_test_task]["F1"] = f1_score
+
+    return task_metrics_dict
+            
+            
+
+def show_table(task_metrics_dict, table_file, res_dir, TASKS):
+    method = res_dir.split('/')[-2]
+    save_dir = res_dir.split('/')[-1]
+
+    f=open(table_file, 'a+')
+    for metric in METRICS:
+        tb = pt.PrettyTable()
+        tb.field_names = [method] + TASKS + ["avg"]
+
+        train_last_test_all_values = []
+        for cur_test_task_id, cur_test_task in enumerate(TASKS):
+            cur_row = []
+            cur_row.append(cur_test_task)
+            train_all_test_first_values = []
+            for cur_train_task_id, cur_train_task in enumerate(TASKS):
+                # value or "-"
+                if cur_test_task_id>=1 and cur_train_task_id <=1:
+                    cur_row.append("-")
+                    continue
+
+                cur_value = task_metrics_dict[cur_test_task_id][cur_train_task_id][metric]
+
+                # for avg
+                if cur_test_task_id==0:
+                    train_all_test_first_values.append(cur_value)
+                if cur_train_task_id==len(TASKS)-1:
+                    train_last_test_all_values.append(cur_value)
+
+                # value or "-"
+                cur_row.append(str(cur_value))
                 
-                # load train model
-                cur_path = os.path.join(folder, f"{index}_{cur_train_task}")
-                tokenizer_dir = os.path.join(cur_path, "tokenizer_config.json")
-                model.tokenizer.from_pretrained(cur_path)
-                model_dir = os.path.join(cur_path, "pytorch_model.bin")
-                model.model.load_state_dict(torch.load(model_dir))
-                model.model.to(args.device)
+            if cur_test_task_id==0:
+                cur_row.append(str(np.round(np.mean(train_all_test_first_values), 2)))
+            else:
+                cur_row.append("-")
+            tb.add_row(cur_row)
 
-                print(f"Loading task {cur_train_task} train Model")
+        cur_row = ["-"]*len(TASKS)
+        cur_row.append(str(np.round(np.mean(train_last_test_all_values), 2)))
+        cur_row.append("-")
+        tb.add_row(cur_row)
 
-                for j, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+        f.write("method: {}, save_dir: {}, metric: {}\n".format(method, save_dir, metric))
+        f.write(str(tb))
+        f.write("\n")
+    f.write("\n")
+    f.write("\n")
+    f.close()
 
-                    print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
 
-                    result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
-                    gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
+
+
+
+
+# def test():
+#     # pass
+#     args = get_args()
+#     model = Seq2SeqToD(args)
+
+#     args.test_file_path = r"runs/Ed,Wow,Daily/"
+#     folders = glob.glob(f"{args.test_file_path}/*") # 获取 model_checkpoint 的文件夹的名称
+
+
+#     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+#     # load dataloader
+#     args.multi, args.continual = False, True
+#     _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
+#     TASKS = list(test_loader.keys())
+
+#     task_metrics_dict = {}
+#     for folder in folders:
+#         method_name = folder.split("/")[-1].split("_")[0] # get method name from folder path
+#         if "MULTI" in folder:
+#             result_path = f'{folder}/FINAL'+'/multiSkill_result.txt'
+#             gt_path = f'{folder}/FINAL'+'/multiSkill_gt.txt'
+#             if os.path.exists(result_path) and os.path.exists(gt_path): 
+#                 pass
+#             else:
+#                 args.multi, args.continual = True, False
+#                 # load dataloader
+#                 _, _, all_test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
+
+#                 # load model and tokenizer
+#                 tokenizer_dir = os.path.join(folder, "tokenizer_config.json")
+#                 model.tokenizer.from_pretrained(folder)
+#                 # load train model
+#                 model_dir = os.path.join(folder, "pytorch_model.bin")
+#                 model.model.load_state_dict(torch.load(model_dir))
+#                 model.model.to(args.device)
+
+#                 test_model_seq2seq(args, model.model, model.tokenizer, test_loader, result_path, gt_path)
+
+#             bleu, f1score = evaluate(hyp_file_path, ref_file_path, model.tokenizer, nltk_choose=False)
+#             # task_metrics_dict["multi"][""]
+#         else:
+#             for index, (cur_train_task, tasks) in enumerate(test_loader.items()):
+                
+#                 # load train model
+#                 cur_path = os.path.join(folder, f"{index}_{cur_train_task}")
+#                 tokenizer_dir = os.path.join(cur_path, "tokenizer_config.json")
+#                 model.tokenizer.from_pretrained(cur_path)
+#                 model_dir = os.path.join(cur_path, "pytorch_model.bin")
+#                 model.model.load_state_dict(torch.load(model_dir))
+#                 model.model.to(args.device)
+
+#                 print(f"Loading task {cur_train_task} train Model")
+
+#                 for j, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+
+#                     print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
+
+#                     result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
+#                     gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
                     
-                    if method_name == "ADAPTER":
-                        test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], 
-                                                                    save_dir, result_path, gt_path, task_id)
-                    else:
-                        test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], 
-                                                                    save_dir, result_path, gt_path, task_id)        
+#                     if method_name == "ADAPTER":
+#                         test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], 
+#                                                                     save_dir, result_path, gt_path, task_id)
+#                     else:
+#                         test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], 
+#                                                                     save_dir, result_path, gt_path, task_id)        
             
             
 
