@@ -44,7 +44,7 @@ def print_sample(data,num):
             print(f'{turn["candidates"][0]}')
         if i_d == num: break
 
-def get_datasets(dataset_list=['SGD'], setting="single", verbose=False, develop=False):
+def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
 
     taskConfig = {
         "Cornell": {
@@ -89,84 +89,85 @@ def get_datasets(dataset_list=['SGD'], setting="single", verbose=False, develop=
     test = []
     datasets = defaultdict(dict) # "Convai2": [train, dev, test]
 
-    if ("Convai2" in dataset_list):
-        print("LOAD Convai2")
-        # train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
-        train_Convai2, dev_Convai2, test_Convai2 = preprocessMain.process_convai2(develop=develop)
-        print("train_Convai2", type(train_Convai2), len(train_Convai2))
-        print("---------")
+    for index, task_name in enumerate(dataset_list):
 
-        if(verbose):
-            print_sample(train_Convai2,2)
-            input()
-        # n_domain, n_intent, n_turns, _ = get_domains_slots(train_Convai2)
-        n_turns = get_n_turns(train_Convai2)
-        table.append({"Name":"Convai2","Trn":len(train_Convai2),"Val":len(dev_Convai2),"Tst":len(test_Convai2), "Tur":n_turns})
-        train += train_Convai2
-        dev += dev_Convai2
-        test += test_Convai2
-        datasets["Convai2"] = {"train": train_Convai2, "dev": dev_Convai2, "test": test_Convai2}
-        # datasets.append({"Convai2": {"train": train_Convai2, "dev": dev_Convai2, "test": test_Convai2}})
+        if task_name == "Convai2":
+            print("LOAD Convai2")
+            # train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
+            train_Convai2, dev_Convai2, test_Convai2 = preprocessMain.process_convai2(develop=develop)
+            print("train_Convai2", type(train_Convai2), len(train_Convai2))
+            print("---------")
+
+            if(verbose):
+                print_sample(train_Convai2,2)
+                input()
+            # n_domain, n_intent, n_turns, _ = get_domains_slots(train_Convai2)
+            n_turns = get_n_turns(train_Convai2)
+            table.append({"Name":"Convai2","Trn":len(train_Convai2),"Val":len(dev_Convai2),"Tst":len(test_Convai2), "Tur":n_turns})
+            train += train_Convai2
+            dev += dev_Convai2
+            test += test_Convai2
+            datasets["Convai2"] = {"train": train_Convai2, "dev": dev_Convai2, "test": test_Convai2}
+            # datasets.append({"Convai2": {"train": train_Convai2, "dev": dev_Convai2, "test": test_Convai2}})
+
+        if task_name == "Ed":
+            print("LOAD ED")
+            train_Ed, dev_Ed, test_Ed = preprocessMain.process_ed(develop=develop)
+
+            n_turns = get_n_turns(train_Ed)
+            table.append({"Name":"Ed","Trn":len(train_Ed),"Val":len(dev_Ed),"Tst":len(test_Ed), "Tur":n_turns})
+            train += train_Ed
+            dev += dev_Ed
+            test += test_Ed
+            datasets["Ed"] = {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}
+            # datasets.append({"Ed": {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}})
+
+        if task_name == "Daily":
+            print("LOAD Daily")
+            train_Daily, dev_Daily, test_Daily = preprocessMain.process_daily(develop=develop)
+
+            n_turns = get_n_turns(train_Ed)
+            table.append({"Name":"Daily","Trn":len(train_Daily),"Val":len(dev_Daily),"Tst":len(test_Daily), "Tur":n_turns})
+            train += train_Daily
+            dev += dev_Daily
+            test += test_Daily
+            datasets["Daily"] = {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}
+            # datasets.append({"Daily": {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}})
+
+        if task_name == "Cornell":
+            print("LOAD Cornell")
+            train_Cornell, dev_Cornell, test_Cornell = preprocessMain.process_cornell(develop=develop)
+
+            n_turns = get_n_turns(train_Cornell)
+            table.append({"Name":"Cornell","Trn":len(train_Cornell),"Val":len(dev_Cornell),"Tst":len(test_Cornell), "Tur":n_turns})
+            train += train_Cornell
+            dev += dev_Cornell
+            test += test_Cornell
+            datasets["Cornell"] = {"train": train_Cornell, "dev": dev_Cornell, "test": test_Cornell}
+
+        if task_name == "Wow":
+            print("LOAD Wow")
+            train_Wow, dev_Wow, test_Wow = preprocessMain.process_wow(develop=develop)
+
+            n_turns = get_n_turns(train_Wow)
+            table.append({"Name":"Wow","Trn":len(train_Wow),"Val":len(dev_Wow),"Tst":len(test_Wow), "Tur":n_turns})
+            train += train_Wow
+            dev += dev_Wow
+            test += test_Wow
+            datasets["Wow"] = {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}
+            # datasets.append({"Wow": {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}})
 
 
-    if ("Ed" in dataset_list):
-        print("LOAD ED")
-        train_Ed, dev_Ed, test_Ed = preprocessMain.process_ed(develop=develop)
+        if task_name == "Ubuntu":
+            print("LOAD Ubuntu")
+            train_Ubuntu, dev_Ubuntu, test_Ubuntu = preprocessMain.process_ubuntu(develop=develop)
 
-        n_turns = get_n_turns(train_Ed)
-        table.append({"Name":"Ed","Trn":len(train_Ed),"Val":len(dev_Ed),"Tst":len(test_Ed), "Tur":n_turns})
-        train += train_Ed
-        dev += dev_Ed
-        test += test_Ed
-        datasets["Ed"] = {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}
-        # datasets.append({"Ed": {"train": train_Ed, "dev": dev_Ed, "test": test_Ed}})
-
-    if ("Daily" in dataset_list):
-        print("LOAD Daily")
-        train_Daily, dev_Daily, test_Daily = preprocessMain.process_daily(develop=develop)
-
-        n_turns = get_n_turns(train_Ed)
-        table.append({"Name":"Daily","Trn":len(train_Daily),"Val":len(dev_Daily),"Tst":len(test_Daily), "Tur":n_turns})
-        train += train_Daily
-        dev += dev_Daily
-        test += test_Daily
-        datasets["Daily"] = {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}
-        # datasets.append({"Daily": {"train": train_Daily, "dev": dev_Daily, "test": test_Daily}})
-
-    if ("Cornell" in dataset_list):
-        print("LOAD Cornell")
-        train_Cornell, dev_Cornell, test_Cornell = preprocessMain.process_cornell(develop=develop)
-
-        n_turns = get_n_turns(train_Cornell)
-        table.append({"Name":"Cornell","Trn":len(train_Cornell),"Val":len(dev_Cornell),"Tst":len(test_Cornell), "Tur":n_turns})
-        train += train_Cornell
-        dev += dev_Cornell
-        test += test_Cornell
-        datasets["Cornell"] = {"train": train_Cornell, "dev": dev_Cornell, "test": test_Cornell}
-
-    if ("Wow" in dataset_list):
-        print("LOAD Wow")
-        train_Wow, dev_Wow, test_Wow = preprocessMain.process_wow(develop=develop)
-
-        n_turns = get_n_turns(train_Wow)
-        table.append({"Name":"Wow","Trn":len(train_Wow),"Val":len(dev_Wow),"Tst":len(test_Wow), "Tur":n_turns})
-        train += train_Wow
-        dev += dev_Wow
-        test += test_Wow
-        datasets["Wow"] = {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}
-        # datasets.append({"Wow": {"train": train_Wow, "dev": dev_Wow, "test": test_Wow}})
-
-
-    if ("Ubuntu" in dataset_list):
-        print("LOAD Ubuntu")
-        train_Ubuntu, dev_Ubuntu, test_Ubuntu = preprocessMain.process_ubuntu(develop=develop)
-
-        n_turns = get_n_turns(train_Ubuntu)
-        table.append({"Name":"Ubuntu","Trn":len(train_Ubuntu),"Val":len(dev_Ubuntu),"Tst":len(test_Ubuntu), "Tur":n_turns})
-        train += train_Ubuntu
-        dev += dev_Ubuntu
-        test += test_Ubuntu
-        datasets["Ubuntu"] = {"train": train_Ubuntu, "dev": dev_Ubuntu, "test": test_Ubuntu}
+            n_turns = get_n_turns(train_Ubuntu)
+            table.append({"Name":"Ubuntu","Trn":len(train_Ubuntu),"Val":len(dev_Ubuntu),"Tst":len(test_Ubuntu), "Tur":n_turns})
+            train += train_Ubuntu
+            dev += dev_Ubuntu
+            test += test_Ubuntu
+            datasets["Ubuntu"] = {"train": train_Ubuntu, "dev": dev_Ubuntu, "test": test_Ubuntu}
 
         # datasets.append({"Ubuntu": {"train": train_Ubuntu, "dev": dev_Ubuntu, "test": test_Ubuntu}})
 

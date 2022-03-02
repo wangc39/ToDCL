@@ -47,13 +47,27 @@ def evaluate_EER(args,results_dict,entities_json,path, names):
 
 def compute_bleu(hyp_text, ref_text):
 
-    hyp_text_array = np.array(hyp_text)
+    # print(type(hyp_text), len(hyp_text), len(hyp_text[0]), len(ref_text))
+    # print(hyp_text[0])
+    # print(ref_text[0])
+
+    for index, line in enumerate(hyp_text):
+        if len(line) != len(hyp_text[0]):
+            print(index, len(line), line)
+
+
+    # hyp_text_array = np.array(hyp_text)
+    # print(hyp_text_array[:, 2])
+    # print(hyp_text_array)
+
     BLEU_list = []
     print('Calculating BLEU...')
 
-    for i in range(len(hyp_text_array[0])):
-
-        BLEU = moses_multi_bleu(np.array(hyp_text[:, i]),np.array(ref_text))
+    for i in range(len(hyp_text[0])):
+        
+        # print(type(np.array(hyp_text_array[:, i])), np.array(hyp_text[:, i]).shape)
+        hyp_text_column = [t[i]for t in hyp_text]
+        BLEU = moses_multi_bleu(hyp_text_column, np.array(ref_text))
         BLEU_list.append(BLEU)
 
     return np.mean(np.array(BLEU_list))
@@ -76,31 +90,34 @@ def load_data(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False):
     
     # hyp_word_list:  [[['I', 'love', 'food'], ['Do', 'you', 'like', '?']], [['my', 'name']]] # use punctuation as a word
     with open(hyp_file_path, 'r') as f:
-        hyp_data = f.readlines()
-        hyp_words = [line.split("|||") for line in hyp_data]
-        if nltk_choose:
-            # use nltk to get word tokens
-            hyp_word_list = [[nltk.word_tokenize(s) for s in line.split("|||")] for line in hyp_data]
-        else:
-            # gpt2 tokenizer
-            # "Using a Transformer network is simple." --> ['Using', 'Ġa', 'ĠTrans', 'former', 'Ġnetwork', 'Ġis', 'Ġsimple', '.']
-            hyp_word_list = [[tokenizer.tokenize(s) for s in line.split("|||")] for line in hyp_data]
+        hyp_data = f.read()
+    hyp_words = [line.split("|||") for line in hyp_data.split("\n") ]
+
+
+    if nltk_choose:
+        # use nltk to get word tokens
+        hyp_word_list = [[nltk.word_tokenize(s) for s in line] for line in hyp_words]
+    else:
+        # gpt2 tokenizer
+        # "Using a Transformer network is simple." --> ['Using', 'Ġa', 'ĠTrans', 'former', 'Ġnetwork', 'Ġis', 'Ġsimple', '.']
+        hyp_word_list = [[tokenizer.tokenize(s) for s in line] for line in hyp_words]
 
     # ref_word_list:   [[['I', 'love', 'food']], [['Do', 'you', 'like', '?']]] # use punctuation as a word
     with open(ref_file_path, 'r') as f:
-        ref_data = f.readlines()
-        ref_word = [line.split("\n") for line in ref_data]
+        ref_data = f.read()
 
-        if nltk_choose:
-            ref_word_list = [[nltk.word_tokenize(line)] for line in ref_data] # inorder to keep same format
-        else:
-            ref_word_list = [[tokenizer.tokenize(line)] for line in ref_data] # inorder to keep same format
+    ref_words = [line for line in ref_data.split("\n")]
 
-
-    return hyp_word_list, ref_word_list, hyp_word, ref_word
+    if nltk_choose:
+        ref_word_list = [[nltk.word_tokenize(line)] for line in ref_words] # inorder to keep same format
+    else:
+        ref_word_list = [[tokenizer.tokenize(line)] for line in ref_words] # inorder to keep same format
 
 
-def evaluate(hyp_file, ref_file, tokenizer, nltk_choose=args.nltk):
+    return hyp_word_list, ref_word_list, hyp_words, ref_words
+
+
+def evaluate(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False):
 
     hyp_word_list, ref_word_list, hyp_word, ref_word = load_data(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False)
 
@@ -120,29 +137,33 @@ def score_folder():
     
     args = parser.parse_args()
     # args.task_type = "NLG"
-    folders = glob.glob(f"{args.model_checkpoint}/*") # 获取model_checkpoint的文件夹的名称
+    folders = glob.glob(f"{args.model_checkpoint}/*") # 获取 model_checkpoint 的文件夹的名称
 
 
-    # entities_j = json.load(open("data/entities_SGD,TM19,TM20,MWOZ.json"))
-    # integers = [str(i) for i in range(100)]
-    # entities_json = defaultdict(lambda: defaultdict(set))
-    # for k,v in entities_j.items():
-    #     for slot, values in v.items():
-    #         entities_json[k][slot] = set([val.lower() for val in values if v not in integers])
-
-    # names = list(perm1.keys())
     RESULT = []
+    TASK = []
     for folder in folders:
-        if "png" in folder or "TOO_HIGH_LR" in folder or "TEMP" in folder:
+        if "png" in folder or "TOO_HIGH_LR" in folder or "TEMP" in folder or "REPLAY" in folder:
             continue
 
-        hyp_file = f'{folder}/FINAL/result.json'
-        ref_file = f'{folder}/FINAL/gt.txt'
+        tokenizer = GPT2Tokenizer.from_pretrained(folder, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
+        
+        if "MULTI" in folder:
+            pass
+            break
+        else:
+            for index, task_name in enumerate(os.listdir(folder)):
+                # taskDict = {}
+                hyp_file_path = f'{folder}/{task_name}/result.txt'
+                ref_file_path = f'{folder}/{task_name}/gt.txt'
+                BLEU, F1 = evaluate(hyp_file_path, ref_file_path, tokenizer, nltk_choose=args.nltk)#, ent=entities_json)
+                
+                pass
+            
 
         # tokenizer = tokenizer.from_pretrained(args.saving_dir)
-        tokenizer = GPT2Tokenizer.from_pretrained(folder, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
 
-        BLEU, F1 = evaluate(hyp_file, ref_file, tokenizer, nltk_choose=args.nltk)#, ent=entities_json)
+        BLEU, F1 = evaluate(hyp_file_path, ref_file_path, tokenizer, nltk_choose=args.nltk)#, ent=entities_json)
 
 
         RESULT.append({"Name":folder.split("/")[-1].split("_")[0],"BLEU":BLEU,"F1":F1})

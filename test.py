@@ -2,6 +2,7 @@
 import os
 import json
 import torch
+import shutil
 import numpy
 import logging
 import random
@@ -207,9 +208,10 @@ def generate_sample_prev_task(args,model,tokenizer,dataset_dic,task_id_so_far,nu
         json.dump(temp_aug, fp, indent=4)
     return temp_aug
 
-def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
-    device = torch.device(f"cuda:0")
-    model.to(device)
+def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path, task_id):
+    
+    # device = torch.device(f"cuda:0")
+    # model.to(args.device)
     model.eval()
 
     gt_replys = []
@@ -226,7 +228,6 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
             # print("token_type_ids.shape", token_type_ids.shape)
             # print("target_ids.shape", target_ids.shape)
 
-            # print()
             if "gpt2" in args.model_checkpoint:
                 candidate_responses = test_generation_GPT2BATCH(model=model,
                                                     tokenizer=tokenizer,
@@ -235,12 +236,14 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
                                                     target_ids=target_ids,
                                                     device=device,
                                                     responses_generate_times=args.responses_generate_times,
-                                                    max_length = 100)
+                                                    task_id=task_id,
+                                                    max_length = 50)
             else:
-                responses = model.generate(input_ids=batch["encoder_input"].to(device),
-                                            attention_mask=batch["attention_mask"].to(device),
+                responses = model.generate(input_ids=input_ids,
+                                            attention_mask=attention_masks_2d,
+                                            token_type_ids=token_type_ids,
                                             eos_token_id=tokenizer.eos_token_id,
-                                            max_length=100)
+                                            max_length=50)
                 value_batch = tokenizer.batch_decode(responses, skip_special_tokens=True)
         
 
@@ -251,29 +254,15 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, time="0_['']"):
             gt_replys.append(reply)
             candidate_texts = convert_ids_to_outtext(tokenizer, candidate_responses)
 
-            # print(f"reply: ", reply)
-            # print(f"candidate_texts: ", candidate_texts)
-            # exit(1)
-
             predictions.append('|||'.join(candidate_texts))
-
-
-    if not os.path.exists(f'{args.saving_dir}/{time}'):
-        os.makedirs(f'{args.saving_dir}/{time}')
-
-    # TODO: file names
-    result_path = f'{args.saving_dir}/{time}'+'/result.txt'
-    gt_path = f'{args.saving_dir}/{time}'+'/gt.txt'
     
     with open(result_path, 'w', encoding="UTF-8") as f:
         f.write("\n".join(predictions))
     with open(gt_path, 'w', encoding="UTF-8") as f:
         f.write("\n".join(gt_replys))
 
-    # print("============== {} infer done! ==============".format(cur_test_task))
 
-    # with open(f'{args.saving_dir}/{time}'+'/generated_responses.json', 'w') as fp:
-    #     json.dump(results, fp, indent=4)
+
 
 def convert_ids_to_outtext(tokenizer, candidate_responses):
     candidate_texts = []
@@ -287,14 +276,14 @@ def convert_ids_to_outtext(tokenizer, candidate_responses):
 def argmin(a):
     return min(range(len(a)), key=lambda x: a[x])
 
-def test_model_seq2seq_ADAPTER(args,model,tokenizer,test_loader,test_dataset,time="0_['']",max_seen_task=0):
+def test_model_seq2seq_ADAPTER(args,model,tokenizer,test_loader,test_dataset,save_dir,max_seen_task=0):
     # device = torch.device(f"cuda:{args.GPU[0]}")
     device = torch.device(f"cuda:0")
     model.model.to(device)
     model.model.eval()
     results = []
 
-    print(model.task_list_seen,len(model.task_list_seen))
+    print(model.task_list_seen, len(model.task_list_seen))
     range_adpt = len(model.task_list_seen)
 
     perplexity_dict = {f'{sample["dial_id"]}_{sample["turn_id"]}_{sample["task_id"]}': [] for sample in test_dataset}
@@ -354,39 +343,21 @@ def test_model_seq2seq_ADAPTER(args,model,tokenizer,test_loader,test_dataset,tim
 
 
 
-# def test_model(args,model,tokenizer,test_loader,time=0):
-    # args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model.to(args.device)
-    # model.eval()
-    # results = []
-    # for task_id, task_loader in tqdm(test_loader.items(),total=len(test_loader)):
-    #     # print(f"Task Id: {task_id}")
-    #     for idx_b, batch in enumerate(task_loader):
-    #         input_ids, _, token_type_ids  = tuple(torch.tensor([batch[input_name]]).to(args.device) for input_name in MODEL_INPUTS)
-    #         with torch.no_grad():
-    #             response = generate(args,model,tokenizer,input_ids,token_type_ids)
-    #         results.append({"id":batch["dial_id"],"turn_id":batch["turn_id"],
-    #                         "dataset":batch["dataset"],"task_id":task_id,
-    #                         "spk":batch["spk"],"gold":batch["row_reply"],
-    #                         "genr":response,"hist":batch["plain_history"]})
-
-    # if not os.path.exists(f'{args.saving_dir}/{time}'):
-    #     os.makedirs(f'{args.saving_dir}/{time}')
-    # with open(f'{args.saving_dir}/{time}'+'/generated_responses.json', 'w') as fp:
-    #     json.dump(results, fp, indent=4)
-
 
 def get_args():
     parser = ArgumentParser()
-    parser.add_argument('--model_checkpoint', type=str, default="gpt2")
+    # parser.add_argument('--model_checkpoint', type=str, default="gpt2")
+    parser.add_argument("--model_checkpoint", type=str, default="", help="Path to the folder with the results")
+    parser.add_argument("--test_file_path", type=str, default="", help="Path to the folder with the results")
+
+
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
     parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
     parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
     parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily,Cornell", help="Path for saving")
-    parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
 
+    parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
     parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
     parser.add_argument("--setting", type=str, default="single", help="Path for saving")
@@ -396,18 +367,14 @@ def get_args():
     parser.add_argument("--debug", action='store_true', help="continual baseline")
     parser.add_argument("--n_epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--num_workers", type=int, default=4, help="The number of workers")
-
     parser.add_argument("--bottleneck_size", type=int, default=100)
     parser.add_argument("--number_of_adpt", type=int, default=40, help="number of adapterss")
     parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
     parser.add_argument("--percentage_LAM0L", type=float, default=0.2, help="LAMOL percentage of augmented data used")
     parser.add_argument("--reg", type=float, default=0.01, help="CL regularization term")
     parser.add_argument("--episodic_mem_size", type=int, default=100, help="number of batch/sample put in the episodic memory")
-    #  options=["E2E","DST","NLG","INTENT"]
-    # parser.add_argument('--task_type', type=str, default="NLG")
-    #  options=["VANILLA"]
     parser.add_argument('--CL', type=str, default="MULTI")
-    # options=[1,2,3,4,5]
+
     parser.add_argument('--seed', default=42, type=int)
 
 
@@ -428,32 +395,83 @@ def get_args():
     return hparams
 
 
+# def test_all_files(args,model, tokenizer, test_loader, test_dataset, save_dir, max_seen_task=0):
+
+
 def test():
     # pass
     args = get_args()
     model = Seq2SeqToD(args)
-    args.saving_dir = r"runs/Ed,Wow,Daily/EWC_EM_100_LAMOL_0.2_REG_0.01_PERM_42_gpt2/"
-    model_dir = os.path.join(args.saving_dir, "pytorch_model.bin")
-    tokenizer_dir = os.path.join(args.saving_dir, "tokenizer_config.json")
 
-    model.model.load_state_dict(torch.load(model_dir))
-    model.tokenizer.from_pretrained(args.saving_dir)
+    args.test_file_path = r"runs/Ed,Wow,Daily/"
+    folders = glob.glob(f"{args.test_file_path}/*") # 获取 model_checkpoint 的文件夹的名称
 
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    args.continual = True
+
+    # load dataloader
+    args.multi, args.continual = False, True
     _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
-    # train_loader, val_loader, dev_val_loader, (train_datasets, test_datasets) = get_data_loaders(args, model.tokenizer)
+    TASKS = list(test_loader.keys())
 
-    print(f"Loading Model: {args.model_checkpoint}")
-    model.to(args.device)
+    task_metrics_dict = {}
+    for folder in folders:
+        method_name = folder.split("/")[-1].split("_")[0] # get method name from folder path
+        if "MULTI" in folder:
+            result_path = f'{folder}/FINAL'+'/multiSkill_result.txt'
+            gt_path = f'{folder}/FINAL'+'/multiSkill_gt.txt'
+            if os.path.exists(result_path) and os.path.exists(gt_path): 
+                pass
+            else:
+                args.multi, args.continual = True, False
+                # load dataloader
+                _, _, all_test_loader, (_, _, _) = get_data_loaders(args, tokenizer=model.tokenizer, test=True)
 
-    test_model_seq2seq(args, model.model, model.tokenizer, test_loader, time=f"FINAL")
+                # load model and tokenizer
+                tokenizer_dir = os.path.join(folder, "tokenizer_config.json")
+                model.tokenizer.from_pretrained(folder)
+                # load train model
+                model_dir = os.path.join(folder, "pytorch_model.bin")
+                model.model.load_state_dict(torch.load(model_dir))
+                model.model.to(args.device)
 
-    # test_model_seq2seq(hparams,model.model,model.tokenizer,dev_val_loader,time=f"FINAL")
+                test_model_seq2seq(args, model.model, model.tokenizer, test_loader, result_path, gt_path)
+
+            bleu, f1score = evaluate(hyp_file_path, ref_file_path, model.tokenizer, nltk_choose=False)
+            # task_metrics_dict["multi"][""]
+        else:
+            for index, (cur_train_task, tasks) in enumerate(test_loader.items()):
+                
+                # load train model
+                cur_path = os.path.join(folder, f"{index}_{cur_train_task}")
+                tokenizer_dir = os.path.join(cur_path, "tokenizer_config.json")
+                model.tokenizer.from_pretrained(cur_path)
+                model_dir = os.path.join(cur_path, "pytorch_model.bin")
+                model.model.load_state_dict(torch.load(model_dir))
+                model.model.to(args.device)
+
+                print(f"Loading task {cur_train_task} train Model")
+
+                for j, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+
+                    print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
+
+                    result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
+                    gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
+                    
+                    if method_name == "ADAPTER":
+                        test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], 
+                                                                    save_dir, result_path, gt_path, task_id)
+                    else:
+                        test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], 
+                                                                    save_dir, result_path, gt_path, task_id)        
+            
+            
 
 
-    # test_model(args,model,tokenizer,test_loader)
+
+
+    # test_all_file(args)
 
 if __name__ == "__main__":
     test()

@@ -15,7 +15,7 @@ from collections import defaultdict
 
 class Seq2SeqToD(pl.LightningModule):
 
-    def __init__(self,args):
+    def __init__(self, args):
         super().__init__()
         if "t5" in args.model_checkpoint:
             model = T5ForConditionalGeneration.from_pretrained(args.model_checkpoint)
@@ -30,7 +30,6 @@ class Seq2SeqToD(pl.LightningModule):
                 model = GPT2Adapter.from_pretrained(args.model_checkpoint)
                 model.add_adapters(bottleneck_size=args.bottleneck_size,adapter_num=args.number_of_adpt)
             else:
-
                 model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
             tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
             # Add special tokens if they are not already added
@@ -93,10 +92,6 @@ class Seq2SeqToD(pl.LightningModule):
                 input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                             kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch_mem)
                 self.model.zero_grad()
-                # (loss), *_ = self.model(input_ids=batch_mem["encoder_input"].to(dev),
-                #     attention_mask=batch_mem["attention_mask"].to(dev) if "gpt2" not in self.model_name else None,
-                #     labels=batch_mem["decoder_output"].to(dev)
-                #     )
 
                 (loss), *_ = self.model(input_ids=input_ids.to(dev),
                     token_type_ids=token_type_ids.to(dev),
