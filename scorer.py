@@ -93,6 +93,8 @@ def load_data(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False):
         hyp_data = f.read()
     hyp_words = [line.split("|||") for line in hyp_data.split("\n") ]
 
+    
+
 
     if nltk_choose:
         # use nltk to get word tokens
@@ -171,4 +173,4 @@ def score_folder():
     print(tabulate(RESULT, headers="keys",tablefmt="github"))
 
 
-score_folder()
+# score_folder()

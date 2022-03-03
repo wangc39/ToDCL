@@ -44,7 +44,11 @@ def print_sample(data,num):
             print(f'{turn["candidates"][0]}')
         if i_d == num: break
 
-def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
+def get_sample_dataset(dataset, sample_dataset_radio=1.0):
+    return dataset[:int(len(dataset) * sample_dataset_radio)]
+
+
+def get_datasets(dataset_list, sample_dataset_radio=1.0, setting="single", verbose=False, develop=False):
 
     taskConfig = {
         "Cornell": {
@@ -95,8 +99,11 @@ def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
             print("LOAD Convai2")
             # train_Convai2, dev_Convai2, test_Convai2 = preprocessConvai2(develop=develop)
             train_Convai2, dev_Convai2, test_Convai2 = preprocessMain.process_convai2(develop=develop)
-            print("train_Convai2", type(train_Convai2), len(train_Convai2))
-            print("---------")
+
+            train_Convai2, dev_Convai2, test_Convai2 = get_sample_dataset(train_Convai2, sample_dataset_radio), \
+                                        get_sample_dataset(dev_Convai2, sample_dataset_radio), get_sample_dataset(test_Convai2, sample_dataset_radio)
+            # print("train_Convai2", type(train_Convai2), len(train_Convai2))
+            # print("---------")
 
             if(verbose):
                 print_sample(train_Convai2,2)
@@ -113,6 +120,9 @@ def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
         if task_name == "Ed":
             print("LOAD ED")
             train_Ed, dev_Ed, test_Ed = preprocessMain.process_ed(develop=develop)
+            train_Ed, dev_Ed, test_Ed = get_sample_dataset(train_Ed, sample_dataset_radio), \
+                                        get_sample_dataset(dev_Ed, sample_dataset_radio), get_sample_dataset(test_Ed, sample_dataset_radio)
+
 
             n_turns = get_n_turns(train_Ed)
             table.append({"Name":"Ed","Trn":len(train_Ed),"Val":len(dev_Ed),"Tst":len(test_Ed), "Tur":n_turns})
@@ -125,7 +135,8 @@ def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
         if task_name == "Daily":
             print("LOAD Daily")
             train_Daily, dev_Daily, test_Daily = preprocessMain.process_daily(develop=develop)
-
+            train_Daily, dev_Daily, test_Daily = get_sample_dataset(train_Daily, sample_dataset_radio), \
+                                        get_sample_dataset(dev_Daily, sample_dataset_radio), get_sample_dataset(test_Daily, sample_dataset_radio)
             n_turns = get_n_turns(train_Ed)
             table.append({"Name":"Daily","Trn":len(train_Daily),"Val":len(dev_Daily),"Tst":len(test_Daily), "Tur":n_turns})
             train += train_Daily
@@ -138,6 +149,9 @@ def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
             print("LOAD Cornell")
             train_Cornell, dev_Cornell, test_Cornell = preprocessMain.process_cornell(develop=develop)
 
+            train_Cornell, dev_Cornell, test_Cornell = get_sample_dataset(train_Cornell, sample_dataset_radio), \
+                            get_sample_dataset(dev_Cornell, sample_dataset_radio), get_sample_dataset(test_Cornell, sample_dataset_radio)
+
             n_turns = get_n_turns(train_Cornell)
             table.append({"Name":"Cornell","Trn":len(train_Cornell),"Val":len(dev_Cornell),"Tst":len(test_Cornell), "Tur":n_turns})
             train += train_Cornell
@@ -148,7 +162,8 @@ def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
         if task_name == "Wow":
             print("LOAD Wow")
             train_Wow, dev_Wow, test_Wow = preprocessMain.process_wow(develop=develop)
-
+            train_Wow, dev_Wow, test_Wow = get_sample_dataset(train_Wow, sample_dataset_radio), \
+                            get_sample_dataset(dev_Wow, sample_dataset_radio), get_sample_dataset(test_Wow, sample_dataset_radio)
             n_turns = get_n_turns(train_Wow)
             table.append({"Name":"Wow","Trn":len(train_Wow),"Val":len(dev_Wow),"Tst":len(test_Wow), "Tur":n_turns})
             train += train_Wow
@@ -161,6 +176,8 @@ def get_datasets(dataset_list, setting="single", verbose=False, develop=False):
         if task_name == "Ubuntu":
             print("LOAD Ubuntu")
             train_Ubuntu, dev_Ubuntu, test_Ubuntu = preprocessMain.process_ubuntu(develop=develop)
+            train_Ubuntu, dev_Ubuntu, test_Ubuntu = get_sample_dataset(train_Ubuntu, sample_dataset_radio), \
+                            get_sample_dataset(dev_Ubuntu, sample_dataset_radio), get_sample_dataset(test_Ubuntu, sample_dataset_radio)
 
             n_turns = get_n_turns(train_Ubuntu)
             table.append({"Name":"Ubuntu","Trn":len(train_Ubuntu),"Val":len(dev_Ubuntu),"Tst":len(test_Ubuntu), "Tur":n_turns})

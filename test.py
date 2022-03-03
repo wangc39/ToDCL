@@ -4,6 +4,7 @@ import json
 import torch
 import shutil
 import numpy
+import glob
 import logging
 import random
 import copy
@@ -16,12 +17,13 @@ from argparse import ArgumentParser
 # from utils.dataloader import make_loader
 from utils.dataloader import get_data_loaders, get_current_task_data, make_loader
 from CL_learner import Seq2SeqToD
+import prettytable as pt
 
-
+from scorer import evaluate
 
 from utils.dataset_ms import SPECIAL_TOKENS
 
-
+METRICS = ["BLEU4", "F1"]
 def _top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
@@ -210,8 +212,8 @@ def generate_sample_prev_task(args,model,tokenizer,dataset_dic,task_id_so_far,nu
 
 def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path, task_id):
     
-    # device = torch.device(f"cuda:0")
-    # model.to(args.device)
+    device = torch.device(f"cuda:0")
+    model.to(device)
     model.eval()
 
     gt_replys = []
@@ -255,7 +257,7 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path
             candidate_texts = convert_ids_to_outtext(tokenizer, candidate_responses)
 
             predictions.append('|||'.join(candidate_texts))
-    
+
     with open(result_path, 'w', encoding="UTF-8") as f:
         f.write("\n".join(predictions))
     with open(gt_path, 'w', encoding="UTF-8") as f:
@@ -347,8 +349,8 @@ def test_model_seq2seq_ADAPTER(args,model,tokenizer,test_loader,test_dataset,sav
 def get_args():
     parser = ArgumentParser()
     # parser.add_argument('--model_checkpoint', type=str, default="gpt2")
-    parser.add_argument("--model_checkpoint", type=str, default="", help="Path to the folder with the results")
-    parser.add_argument("--test_file_path", type=str, default="", help="Path to the folder with the results")
+    parser.add_argument("--model_checkpoint", type=str, default="gpt2", help="Path to the folder with the results")
+    parser.add_argument("--saving_dir", type=str, default="result/", help="Path to the folder with the results")
 
 
     parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
@@ -356,6 +358,7 @@ def get_args():
     parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
     parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
+    parser.add_argument("--sample_dataset_radio", type=float, default=1.0, help="To sample the dataset for quick training")
 
     parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
     parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
@@ -380,10 +383,10 @@ def get_args():
 
     hparams = parser.parse_args()
 
-    if(hparams.CL == "ADAPTER"):
-        hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
-    else:
-        hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+    # if(hparams.CL == "ADAPTER"):
+    #     hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+    # else:
+    #     hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
     if(hparams.CL == "MULTI"): 
         hparams.multi = True
         hparams.continual = False
@@ -396,49 +399,57 @@ def get_args():
 
 
 
-def test():
+def test(args):
     # pass
-    args = get_args()
-    model = Seq2SeqToD(args)
 
-    args.test_file_path = r"runs/Ed,Wow,Daily/"
+    model = Seq2SeqToD(args)
+    # load dataloader
+    tokenizer = model.tokenizer
+
+    args.test_file_path = r"/data/wangcong/CL-dialogue/runs/Convai2,Ed,Wow,Daily,Cornell/"
     folders = glob.glob(f"{args.test_file_path}/*") # 获取 model_checkpoint 的文件夹的名称
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # load dataloader
-    model = Seq2SeqToD(hparams)
-    tokenizer = model.tokenizer
 
     args.multi, args.continual = False, True
     _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=tokenizer, test=True)
     TASKS = list(test_loader.keys())
 
-    task_metrics_dict = {}
+    print(folders)
     for folder in folders:
+        task_metrics_dict = {}
         method_name = folder.split("/")[-1].split("_")[0] # get method name from folder path
-        for index, (cur_train_task, tasks) in enumerate(test_loader.items()):
+        print(f"dealing {method_name} result")
+        if method_name != "VANILLA": contniue
+        for cur_train_task_id, (cur_train_task, tasks) in enumerate(test_loader.items()):
 
             if method_name == "MULTI":
                 cur_train_task = "multi"
-            task_metrics_dict[cur_train_task] = {}
-            for j, (cur_test_task) in enumerate(TASKS[:(index+1)]):
+            task_metrics_dict[cur_train_task_id] = {}
+            for cur_test_task_id, (cur_test_task) in enumerate(TASKS[:(cur_train_task_id+1)]):
                 print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
-                task_metrics_dict[cur_test_task][cur_train_task] = {}
+                task_metrics_dict[cur_train_task_id][cur_test_task_id] = {}
 
                 result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
                 gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
 
                 bleu, f1_score = evaluate(result_path, gt_path, tokenizer, nltk_choose=False)
-                task_metrics_dict[cur_test_task]["BLEU4"] = bleu
-                task_metrics_dict[cur_test_task]["F1"] = f1_score
+                task_metrics_dict[cur_train_task_id][cur_test_task_id]["BLEU4"] = bleu
+                task_metrics_dict[cur_train_task_id][cur_test_task_id]["F1"] = f1_score
+        method_saving_dir = os.path.join(args.saving_dir, method_name)
+        if not os.path.exists(method_saving_dir):
+            os.mkdir(method_saving_dir)
+        table_file = os.path.join(method_saving_dir, "table_paper.txt")
+        print(f"table_file: {table_file}")
+        show_table(task_metrics_dict, table_file, method_name, TASKS)
 
-    return task_metrics_dict
+    # return task_metrics_dict
             
             
 
-def show_table(task_metrics_dict, table_file, res_dir, TASKS):
-    method = res_dir.split('/')[-2]
-    save_dir = res_dir.split('/')[-1]
+def show_table(task_metrics_dict, table_file, method, TASKS):
+    # method = res_dir.split('/')[-2]
+    save_dir = table_file.split('/')[-1]
 
     f=open(table_file, 'a+')
     for metric in METRICS:
@@ -566,5 +577,10 @@ def show_table(task_metrics_dict, table_file, res_dir, TASKS):
     # test_all_file(args)
 
 if __name__ == "__main__":
-    test()
+    args = get_args()
+    test(args)
+    # task_metrics_dict = test(args)
+    # table_file = os.path.join('/'.join(args.saving_dir.split("/")[:-2]), "table_paper.txt")
+    # show_table(task_metrics_dict, table_file, args.res_dir, TASKS)
+
     pass

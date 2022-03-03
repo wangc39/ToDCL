@@ -7,6 +7,7 @@ import glob
 import re
 
 import time
+import copy
 from random import sample
 import pytorch_lightning as pl
 import random
@@ -32,12 +33,23 @@ def get_checkpoint(log_dir, index_to_load):
             checkpoint_name = f+"/lightning_logs/"+ version+"/checkpoints/"+check_name
     return checkpoint_name
 
+def load_all_test_loaders(hparams, tokenizer, mode):
+    args = copy.deepcopy(hparams)
+    if mode == "mutli":
+        args.multi, args.continual = True, False
+        _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer, test=True) # only load all test datasets
+    else:
+        args.multi, args.continual = False, True
+        _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer, test=True) # only load all test datasets
+
+    return test_loader
 
 def train(hparams, *args):
     if(hparams.CL == "ADAPTER"):
         hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
     else:
         hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+    
     if(hparams.CL == "MULTI"): 
         hparams.multi = True
         hparams.continual = False
@@ -47,8 +59,9 @@ def train(hparams, *args):
 
     # train!
     model = Seq2SeqToD(hparams)
+    train_loader, val_loader, test_loader, (train_datasets, val_datasets, test_datasets) = get_data_loaders(hparams, model.tokenizer)
 
-    train_loader, val_loader, dev_val_loader, (train_datasets, val_datasets, test_datasets) = get_data_loaders(hparams, model.tokenizer)
+
 
     seed_everything(hparams.seed)
     # do not need
@@ -64,13 +77,14 @@ def train(hparams, *args):
 
 
     task_seen_so_far = []
-    TASKS = list(train_loader.keys())
+    TASKS = hparams.dataset_list.split(",")
+
+    all_test_loader = load_all_test_loaders(hparams, model.tokenizer, mode="continual")
 
     if(hparams.CL != "MULTI"): model.set_number_of_tasks(len(list(train_loader.keys())))
     if(hparams.CL == "GEM"): model.set_up_gem()
 
     if hparams.multi:
-        # hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs/{hparams.dataset_list}/multi/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
 
         start = time.time()
         trainer = Trainer(
@@ -81,20 +95,22 @@ def train(hparams, *args):
                 callbacks=[pl.callbacks.EarlyStopping(monitor='val_loss',min_delta=0.00, patience=5,verbose=False, mode='min')],
                 gpus=[0],
                 )
-        trainer.fit(model, train_loader, val_loader)
+        trainer.fit(model, mutli_train_loader, mutli_val_loader)
         end = time.time()
         print ("Time elapsed:", end - start)
         model.model.save_pretrained(f'{hparams.saving_dir}')
         model.tokenizer.save_pretrained(f'{hparams.saving_dir}')
 
-        for jj, (cur_test_task) in enumerate(TASKS):
+        if not os.path.exists(f'{hparams.saving_dir}/FINAL'):
+            os.mkdir(f'{hparams.saving_dir}/FINAL')
 
+        for jj, (cur_test_task) in enumerate(TASKS):
             result_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_{cur_test_task}_train_multi_result.txt'
             gt_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_{cur_test_task}_train_multi_gt.txt'
-            test_model_seq2seq(hparams, model.model, model.tokenizer, dev_val_loader, result_path, gt_path)
+            test_model_seq2seq(hparams, model.model, model.tokenizer, all_test_loader[cur_test_task], result_path, gt_path)
     
     elif hparams.continual:
-
+        
         for task_num, (task_id, task_loader) in enumerate(train_loader.items()):
             model.task_list_seen.append(task_id)
  
@@ -139,21 +155,22 @@ def train(hparams, *args):
             trainer.fit(model, task_loader, val_loader[task_id])
             end = time.time()
             print ("Time elapsed:", end - start)
-            #load best model
-            # this model are better if the are runned to they epoch number
-            if(hparams.CL != "LAMOL" and hparams.CL != "EWC"):
-                # checkpoint = torch.load(trainer.checkpoint_callback.best_model_path) use this if the next doesn't work
-                checkpoint = torch.load(trainer.checkpoint_callback.best_model_path, map_location=lambda storage, loc: storage)
-                print("load from:",trainer.checkpoint_callback.best_model_path)
-                checkpoint['state_dict'] = { k.replace('model.', ''): v for k, v in checkpoint['state_dict'].items() }
-                model.model.load_state_dict(checkpoint['state_dict'])
+            
+            # #load best model
+            # # this model are better if the are runned to they epoch number
+            # if(hparams.CL != "LAMOL" and hparams.CL != "EWC"):
+            #     # checkpoint = torch.load(trainer.checkpoint_callback.best_model_path) use this if the next doesn't work
+            #     checkpoint = torch.load(trainer.checkpoint_callback.best_model_path, map_location=lambda storage, loc: storage)
+            #     print("load from:",trainer.checkpoint_callback.best_model_path)
+            #     checkpoint['state_dict'] = { k.replace('model.', ''): v for k, v in checkpoint['state_dict'].items() }
+            #     model.model.load_state_dict(checkpoint['state_dict'])
 
-            # testing the model by generating the answers
-            if(hparams.test_every_step):
-                if(hparams.CL == "ADAPTER"):
-                    test_model_seq2seq_ADAPTER(hparams,model,model.tokenizer,dev_val_loader,test_datasets,time=f"{task_num}_{task_id}")
-                else:                
-                    test_model_seq2seq(hparams,model.model,model.tokenizer,dev_val_loader,time=f"{task_num}_{task_id}")
+            # # testing the model by generating the answers
+            # if(hparams.test_every_step):
+            #     if(hparams.CL == "ADAPTER"):
+            #         test_model_seq2seq_ADAPTER(hparams,model,model.tokenizer,dev_val_loader, test_datasets,time=f"{task_num}_{task_id}")
+            #     else:                
+            #         test_model_seq2seq(hparams,model.model,model.tokenizer,dev_val_loader, time=f"{task_num}_{task_id}")
 
             ## END CORE
 
@@ -205,15 +222,21 @@ def train(hparams, *args):
             model.tokenizer.save_pretrained(f'{task_path}')
 
             # for model test  
+            if not os.path.exists(f'{hparams.saving_dir}/FINAL'):
+                os.mkdir(f'{hparams.saving_dir}/FINAL')
+            
             for jj, (cur_test_task) in enumerate(TASKS[:(task_num+1)]):
-                result_path = f'{task_path}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_result.txt'
-                gt_path = f'{task_path}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_gt.txt'
+
+                print(f"cur_test_task: {cur_test_task}")
+                print(f"{list(all_test_loader.keys())}")
+                result_path = f'{hparams.saving_dir}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_result.txt'
+                gt_path = f'{hparams.saving_dir}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_gt.txt'
                 if(hparams.CL == "ADAPTER"):
                     test_model_seq2seq(hparams, model.model, model.tokenizer, 
-                                                        dev_val_loader[cur_test_task], result_path, gt_path, task_id)
+                                                        all_test_loader[cur_test_task], result_path, gt_path, task_id)
                 else:                
                     test_model_seq2seq(hparams, model.model, model.tokenizer, 
-                                            dev_val_loader[cur_test_task], result_path, gt_path, task_id=-1)
+                                            all_test_loader[cur_test_task], result_path, gt_path, task_id=-1)
 
 
 
@@ -229,9 +252,10 @@ if __name__ == '__main__':
     parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
     parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
+    parser.add_argument("--sample_dataset_radio", type=float, default=1.0, help="To sample the dataset for quick training")
 
-    # parser.add_argument("--dataset_list", type=str, default="Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
-    parser.add_argument("--dataset_list", type=str, default="Ed,Daily", help="Path for saving")
+    parser.add_argument("--dataset_list", type=str, default="Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
+    # parser.add_argument("--dataset_list", type=str, default="Ed,Daily", help="Path for saving")
 
     # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
 

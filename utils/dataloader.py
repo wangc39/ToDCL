@@ -158,7 +158,9 @@ def make_loader(args, tokenizer, origin_dataset, extra_dataset=None, cur_task=No
 
 def get_data_loaders(args, tokenizer, test=False):
     """ Prepare the dataset for training and evaluation """
-    aggregate = get_datasets(dataset_list=args.dataset_list.split(','), setting=args.setting, verbose=args.verbose, develop=args.debug)
+    sample_dataset_radio = args.sample_dataset_radio
+    aggregate = get_datasets(dataset_list=args.dataset_list.split(','), sample_dataset_radio=sample_dataset_radio, \
+                                                        setting=args.setting, verbose=args.verbose, develop=args.debug)
     
 
     collate_fn_ = collate_fn_GPT2 if("gpt2" in args.model_checkpoint) else collate_fn
@@ -199,7 +201,7 @@ def get_data_loaders(args, tokenizer, test=False):
     if(args.continual):
         if(not test):
             for task_id, dataset_task in datasets["train"].items():
-                trainMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_train")
+                trainMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_train", sample_dataset_radio=sample_dataset_radio)
                 train_loaders[task_id] = DataLoader(
                     trainMSDatasets, 
                     batch_size=args.train_batch_size, 
@@ -208,7 +210,7 @@ def get_data_loaders(args, tokenizer, test=False):
                     shuffle=True)
                 train_datasets[task_id] = dataset_task
             for task_id, dataset_task in datasets["dev"].items():
-                validMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_dev")
+                validMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_dev", sample_dataset_radio=sample_dataset_radio)
                 valid_loaders[task_id] = DataLoader(
                     validMSDatasets, 
                     batch_size=args.valid_batch_size,
@@ -218,11 +220,11 @@ def get_data_loaders(args, tokenizer, test=False):
                 val_datasets[task_id] = dataset_task
         else:
             for task_id, dataset_task in datasets["test"].items():
-                testMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"test", lm_labels=False, with_eos=False)
+                testMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"test", lm_labels=False, with_eos=False, sample_dataset_radio=sample_dataset_radio)
                 test_loaders[task_id] = DataLoader(
-                    trainMSDatasets, 
-                    batch_size=args.train_batch_size, 
-                    collate_fn=trainMSDatasets.collate,
+                    testMSDatasets, 
+                    batch_size=args.test_batch_size, 
+                    collate_fn=testMSDatasets.collate,
                     num_workers=args.num_workers,
                     shuffle=True)
                 test_datasets[task_id] = dataset_task
@@ -232,7 +234,7 @@ def get_data_loaders(args, tokenizer, test=False):
             dataset_train = []
             for task_id, dataset_task in datasets["train"].items():
                 dataset_train += dataset_task 
-            trainMSDatasets = MSDataset(dataset_train, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_train")
+            trainMSDatasets = MSDataset(dataset_train, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_train", sample_dataset_radio=sample_dataset_radio)
             train_loaders = DataLoader(
                 trainMSDatasets, 
                 batch_size=args.train_batch_size, 
@@ -243,7 +245,7 @@ def get_data_loaders(args, tokenizer, test=False):
             dataset_dev = []
             for task_id, dataset_task in datasets["dev"].items():
                 dataset_dev += dataset_task
-            validMSDatasets = MSDataset(dataset_dev, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_dev")
+            validMSDatasets = MSDataset(dataset_dev, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_dev", sample_dataset_radio=sample_dataset_radio)
             valid_loaders = DataLoader(
                 validMSDatasets, 
                 batch_size=args.valid_batch_size,
@@ -254,7 +256,8 @@ def get_data_loaders(args, tokenizer, test=False):
             dataset_test = []
             for task_id, dataset_task in datasets["test"].items():
                 dataset_test += dataset_task
-            testMSDatasets = MSDataset(dataset_test, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_test", lm_labels=False, with_eos=False)
+            testMSDatasets = MSDataset(dataset_test, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_test", \
+                                                 lm_labels=False, with_eos=False, sample_dataset_radio=sample_dataset_radio)
             test_loaders = DataLoader(
                 testMSDatasets, 
                 batch_size=args.test_batch_size,

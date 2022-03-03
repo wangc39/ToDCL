@@ -25,8 +25,8 @@ ATTR_TO_SPECIAL_TOKEN = {'pad_token': '[PAD]', 'unk_token': '[unk]',
 
 class MSDataset(Dataset):
 
-    def __init__(self, data, tokenizer, extra_data=None, cur_task=None, max_history=15, max_seq_len=512, max_response_len=128, batch_first=True, \
-        lm_labels=True, with_eos=True):
+    def __init__(self, data, tokenizer, extra_data=None, cur_task=None, max_history=15, max_seq_len=512, sample_dataset_radio=1.0, 
+                                            max_response_len=128, batch_first=True, lm_labels=True, with_eos=True):
         self.data = data
         self.tokenizer = tokenizer
         self.max_history = max_history
@@ -50,9 +50,16 @@ class MSDataset(Dataset):
         self.lm_labels = lm_labels
         self.with_eos = with_eos
         self.cur_task = cur_task if cur_task else None # When multi task, cur task is uncertain
+        self.sample_dataset_radio = sample_dataset_radio
 
         # load dataset from token
         dataset_cache_path = "cache/{}_{}".format(self.cur_task, type(self.tokenizer).__name__)
+        if sample_dataset_radio != 1.0: 
+            dataset_cache_base_path = "cache/sample_radio_{}".format(self.sample_dataset_radio)
+            if not os.path.exists(dataset_cache_base_path):
+                os.mkdir(dataset_cache_base_path)
+            dataset_cache_path = "cache/sample_radio_{}/{}_{}".format(self.sample_dataset_radio, self.cur_task, type(self.tokenizer).__name__)
+
         if extra_data:
             extra_data_token = self.get_data_token(dataset_cache_path=None)
             data = self.get_data_token(dataset_cache_path=dataset_cache_path)
