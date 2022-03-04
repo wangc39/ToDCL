@@ -34,14 +34,22 @@ this will randomly sample 10 example per task, and replay it while learning new 
 CUDA_VISIBLE_DEVICES=0 nohup python train.py --CL REPLAY --episodic_mem_size 100 > ./outputs/alldatasets/REPLAY.log 2>&1 &
 
 ```
-CUDA_VISIBLE_DEVICES=0 nohup python train.py --CL REPLAY --episodic_mem_size 100 > ./outputs/alldatasets/REPLAY.log 2>&1 &
+CUDA_VISIBLE_DEVICES=0 nohup python train.py --CL REPLAY --episodic_mem_size 100 --sample_dataset_radio 0.1 > ./outputs/alldatasets/REPLAY.log 2>&1 &
 
 
 CUDA_VISIBLE_DEVICES=1 nohup python train.py --CL MULTI --sample_dataset_radio 0.1 > ./outputs/alldatasets/MULTI.log 2>&1 &
-CUDA_VISIBLE_DEVICES=2 nohup python train.py --CL VANILLA --sample_dataset_radio 0.1 > ./outputs/alldatasets/VANILLA.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup python train.py --CL MULTI --sample_dataset_radio 0.1 --train_batch_size 4 > ./outputs/alldatasets/MULTI.log 2>&1 &
+
+#### VANILLA
+CUDA_VISIBLE_DEVICES=1 nohup python train.py --CL VANILLA --sample_dataset_radio 0.1 --train_batch_size 4 > ./outputs/sample_0.1/VANILLA.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup python train.py --CL VANILLA --sample_dataset_radio 0.1 --train_batch_size 4 > ./outputs/alldatasets/VANILLA.log 2>&1 &
+
 
 CUDA_VISIBLE_DEVICES=3 nohup python train.py --CL L2 --reg 0.01   > ./outputs/alldatasets/L2.log 2>&1 &
-CUDA_VISIBLE_DEVICES=7 nohup python train.py --CL EWC --reg 0.01  > ./outputs/alldatasets/EWC.log 2>&1 &
+
+#### EWC
+CUDA_VISIBLE_DEVICES=2 nohup python train.py --CL EWC  --reg 0.01 --sample_dataset_radio 0.1 --train_batch_size 2 > ./outputs/sample_0.1/EWC.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup python train.py --CL EWC --reg 0.01  > ./outputs/alldatasets/EWC.log 2>&1 &
 
 CUDA_VISIBLE_DEVICES=5 nohup python train.py --CL AGEM --episodic_mem_size 100 --reg 1.0  > ./outputs/alldatasets/AGEM.log 2>&1 &
 CUDA_VISIBLE_DEVICES=6 nohup python train.py --CL LAMOL --percentage_LAM0L 200  > ./outputs/alldatasets/LAMOL.log 2>&1 &
@@ -71,6 +79,8 @@ python train.py --CL REPLAY --episodic_mem_size 50 --lr 6.25e-5 --n_epochs 10 --
 ## Evaluation 
 
 ```
+python test.py --sample_dataset_radio 0.1 
+python test.py --sample_dataset_radio 0.1 --remake_test_file
 python scorer.py --model_checkpoint runs/BEST/
 python scorer.py --model_checkpoint /data/wangcong/CL-dialogue/runs/Convai2,Ed,Wow,Daily,Cornell/
 

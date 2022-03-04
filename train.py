@@ -13,6 +13,8 @@ import pytorch_lightning as pl
 import random
 from pytorch_lightning import Trainer, seed_everything
 from utils.dataloader import get_data_loaders, get_current_task_data, make_loader
+from utils.opt import parse_train_opt
+from utils.utils import make_check_folder
 
 from test import test_model_seq2seq, generate_sample_prev_task, test_model_seq2seq_ADAPTER
 from collections import defaultdict
@@ -49,6 +51,12 @@ def train(hparams, *args):
         hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
     else:
         hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+    # 如果对数据集进行抽样的话
+    if(hparams.sample_dataset_radio != 1.0):
+        if(hparams.CL == "ADAPTER"):
+            hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs_sample_{hparams.sample_dataset_radio}/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
+        else:
+            hparams.saving_dir = f"/data/wangcong/CL-dialogue/runs_sample_{hparams.sample_dataset_radio}/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"    
     
     if(hparams.CL == "MULTI"): 
         hparams.multi = True
@@ -59,11 +67,11 @@ def train(hparams, *args):
 
     # train!
     model = Seq2SeqToD(hparams)
-    train_loader, val_loader, test_loader, (train_datasets, val_datasets, test_datasets) = get_data_loaders(hparams, model.tokenizer)
-
-
+    train_loader, valid_loader, test_loader, all_train_loaders, all_valid_loaders, \
+                    all_test_loaders, (train_datasets, val_datasets, test_datasets)  = get_data_loaders(hparams, model.tokenizer)
 
     seed_everything(hparams.seed)
+
     # do not need
     # ## make the permutation 
     # if(hparams.continual):
@@ -79,13 +87,10 @@ def train(hparams, *args):
     task_seen_so_far = []
     TASKS = hparams.dataset_list.split(",")
 
-    all_test_loader = load_all_test_loaders(hparams, model.tokenizer, mode="continual")
-
     if(hparams.CL != "MULTI"): model.set_number_of_tasks(len(list(train_loader.keys())))
     if(hparams.CL == "GEM"): model.set_up_gem()
 
     if hparams.multi:
-
         start = time.time()
         trainer = Trainer(
                 default_root_dir=hparams.saving_dir,
@@ -95,32 +100,37 @@ def train(hparams, *args):
                 callbacks=[pl.callbacks.EarlyStopping(monitor='val_loss',min_delta=0.00, patience=5,verbose=False, mode='min')],
                 gpus=[0],
                 )
-        trainer.fit(model, mutli_train_loader, mutli_val_loader)
+        trainer.fit(model, all_train_loaders, all_valid_loaders)
         end = time.time()
         print ("Time elapsed:", end - start)
+        # save the model and tokenizer
         model.model.save_pretrained(f'{hparams.saving_dir}')
         model.tokenizer.save_pretrained(f'{hparams.saving_dir}')
 
-        if not os.path.exists(f'{hparams.saving_dir}/FINAL'):
-            os.mkdir(f'{hparams.saving_dir}/FINAL')
-
-        for jj, (cur_test_task) in enumerate(TASKS):
+        make_check_folder(f'{hparams.saving_dir}/FINAL')
+        # test for all datasets
+        for cur_test_task_id, (cur_test_task) in enumerate(TASKS):
             result_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_{cur_test_task}_train_multi_result.txt'
             gt_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_{cur_test_task}_train_multi_gt.txt'
-            test_model_seq2seq(hparams, model.model, model.tokenizer, all_test_loader[cur_test_task], result_path, gt_path)
-    
+            test_model_seq2seq(hparams, model.model, model.tokenizer, test_loader[cur_test_task], result_path, gt_path)
+        
+        # TODO: to test all file
+        result_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_multiAll_train_multiAll_result.txt'
+        gt_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_multiAll_train_multiAll_gt.txt'
+        test_model_seq2seq(hparams, model.model, model.tokenizer, all_test_loaders, result_path, gt_path)
+
     elif hparams.continual:
         
-        for task_num, (task_id, task_loader) in enumerate(train_loader.items()):
-            model.task_list_seen.append(task_id)
+        for cur_train_task_id, (cur_train_task, task_loader) in enumerate(train_loader.items()):
+            model.task_list_seen.append(cur_train_task)
  
-            task_path = f'{hparams.saving_dir}/{task_num}_{task_id}'
+            task_path = f'{hparams.saving_dir}/{cur_train_task_id}_{cur_train_task}'
 
             if(hparams.CL == "REPLAY"):
                 print(f"Memory Size {len(model.reply_memory)}")
                 # task_loader = make_loader(hparams,train_datasets[task_id]+model.reply_memory,model.tokenizer)
-                task_loader = make_loader(hparams, tokenizer=model.tokenizer, origin_dataset=train_datasets[task_id], \
-                                                    extra_dataset=model.reply_memory, cur_task=task_id)
+                task_loader = make_loader(hparams, tokenizer=model.tokenizer, origin_dataset=train_datasets[cur_train_task], \
+                                                    extra_dataset=model.reply_memory, cur_task=cur_train_task)
 
             # TODO LAMOL method
             if(hparams.CL == "LAMOL"):
@@ -141,7 +151,8 @@ def train(hparams, *args):
 
             ## CORE
             print()
-            print(f"TASK:{task_id}")
+            print(f"cur_train_task: {cur_train_task}")
+            print("---"*20)
             start = time.time()
             trainer = Trainer(
                 default_root_dir=task_path,
@@ -152,18 +163,18 @@ def train(hparams, *args):
                 gpus=[0],
                 #limit_train_batches=100,
             )
-            trainer.fit(model, task_loader, val_loader[task_id])
+            trainer.fit(model, task_loader, valid_loader[cur_train_task])
             end = time.time()
             print ("Time elapsed:", end - start)
             
-            # #load best model
-            # # this model are better if the are runned to they epoch number
-            # if(hparams.CL != "LAMOL" and hparams.CL != "EWC"):
-            #     # checkpoint = torch.load(trainer.checkpoint_callback.best_model_path) use this if the next doesn't work
-            #     checkpoint = torch.load(trainer.checkpoint_callback.best_model_path, map_location=lambda storage, loc: storage)
-            #     print("load from:",trainer.checkpoint_callback.best_model_path)
-            #     checkpoint['state_dict'] = { k.replace('model.', ''): v for k, v in checkpoint['state_dict'].items() }
-            #     model.model.load_state_dict(checkpoint['state_dict'])
+            #load best model 这里可以加载 epoches之后的最好的model
+            # this model are better if the are runned to they epoch number
+            if(hparams.CL != "LAMOL" and hparams.CL != "EWC"):
+                # checkpoint = torch.load(trainer.checkpoint_callback.best_model_path) use this if the next doesn't work
+                checkpoint = torch.load(trainer.checkpoint_callback.best_model_path, map_location=lambda storage, loc: storage)
+                print("load from:", trainer.checkpoint_callback.best_model_path)
+                checkpoint['state_dict'] = { k.replace('model.', ''): v for k, v in checkpoint['state_dict'].items() }
+                model.model.load_state_dict(checkpoint['state_dict'])
 
             # # testing the model by generating the answers
             # if(hparams.test_every_step):
@@ -182,10 +193,10 @@ def train(hparams, *args):
                     if idx_b==hparams.episodic_mem_size: break
             elif hparams.CL == "REPLAY":
                 # in percentage
-                model.reply_memory += sample(train_datasets[task_id],min(len(train_datasets[task_id]),hparams.episodic_mem_size))# sample(train_datasets[task_id],min(len(train_datasets[task_id]),int(hparams.episodic_mem_size*len(train_datasets[task_id])))
+                model.reply_memory += sample(train_datasets[cur_train_task],min(len(train_datasets[cur_train_task]), hparams.episodic_mem_size))# sample(train_datasets[task_id],min(len(train_datasets[task_id]),int(hparams.episodic_mem_size*len(train_datasets[task_id])))
             else: ## save example per task
                 for idx_b, b in enumerate(task_loader):
-                    model.episodic_mem[task_id].append(b)
+                    model.episodic_mem[cur_train_task].append(b)
                     if idx_b==hparams.episodic_mem_size: break
 
 
@@ -197,7 +208,7 @@ def train(hparams, *args):
                     model.fisher[n] = torch.zeros(p.size()) #torch.Tensor(p.cpu().data).zero_()
 
                 if hparams.CL == "EWC":
-                    for _, batch in enumerate(model.episodic_mem[task_id]):
+                    for _, batch in enumerate(model.episodic_mem[cur_train_task]):
                         model.model.zero_grad()
 
                         input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
@@ -213,31 +224,32 @@ def train(hparams, *args):
                                 model.fisher[n].data += p.grad.data ** 2
 
                     for name_f,_ in model.fisher.items():
-                        model.fisher[name_f] /= len(model.episodic_mem[task_id]) #*hparams.train_batch_size
+                        model.fisher[name_f] /= len(model.episodic_mem[cur_train_task]) #*hparams.train_batch_size
                     model.model.zero_grad()
-            task_seen_so_far.append(task_id)
+            task_seen_so_far.append(cur_train_task)
 
             # save task model and tokenizer
             model.model.save_pretrained(f'{task_path}')
             model.tokenizer.save_pretrained(f'{task_path}')
 
             # for model test  
-            if not os.path.exists(f'{hparams.saving_dir}/FINAL'):
-                os.mkdir(f'{hparams.saving_dir}/FINAL')
+            make_check_folder(f'{hparams.saving_dir}/FINAL')
+
             
-            for jj, (cur_test_task) in enumerate(TASKS[:(task_num+1)]):
+            for cur_test_task_id, (cur_test_task) in enumerate(TASKS[:(cur_train_task_id+1)]):
 
-                print(f"cur_test_task: {cur_test_task}")
-                print(f"{list(all_test_loader.keys())}")
-                result_path = f'{hparams.saving_dir}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_result.txt'
-                gt_path = f'{hparams.saving_dir}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{task_id}_gt.txt'
-                if(hparams.CL == "ADAPTER"):
-                    test_model_seq2seq(hparams, model.model, model.tokenizer, 
-                                                        all_test_loader[cur_test_task], result_path, gt_path, task_id)
-                else:                
-                    test_model_seq2seq(hparams, model.model, model.tokenizer, 
-                                            all_test_loader[cur_test_task], result_path, gt_path, task_id=-1)
+                print(f"For test: cur_train_task: {cur_train_task}\t cur_test_task: {cur_test_task}")
+                result_path = f'{hparams.saving_dir}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
+                gt_path = f'{hparams.saving_dir}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
+                
+                task_id = cur_train_task_id if (hparams.CL == "ADAPTER") else -1
+                test_model_seq2seq(hparams, model.model, model.tokenizer, test_loader[cur_test_task],
+                                                        result_path, gt_path, task_id=task_id)
 
+        # TODO: test all 
+        result_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_continualAll_train_continualAll_result.txt'
+        gt_path = f'{hparams.saving_dir}/FINAL' + f'/multiSkill_test_continualAll_train_continualAll_gt.txt'
+        test_model_seq2seq(hparams, model.model, model.tokenizer, all_test_loaders, result_path, gt_path)
 
 
 
@@ -245,42 +257,5 @@ def train(hparams, *args):
 
 if __name__ == '__main__':
     # CUDA_VISIBLE_DEVICES=0 python train.py --task_type NLG --CL MULTI 
-    parser = ArgumentParser()
-    parser.add_argument('--model_checkpoint', type=str, default="gpt2")
-    parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
-    parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
-    parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
-    parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    parser.add_argument("--sample_dataset_radio", type=float, default=1.0, help="To sample the dataset for quick training")
-
-    parser.add_argument("--dataset_list", type=str, default="Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
-    # parser.add_argument("--dataset_list", type=str, default="Ed,Daily", help="Path for saving")
-
-    # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
-
-    parser.add_argument("--max_history", type=int, default=15, help="max number of turns in the dialogue")
-    parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
-    parser.add_argument("--setting", type=str, default="single", help="Path for saving")
-    parser.add_argument("--verbose", action='store_true', help="continual baseline")
-    parser.add_argument("--test_every_step", action='store_true', help="continual baseline")
-    parser.add_argument("--length", type=int, default=50, help="lenght of the generation")
-    parser.add_argument("--debug", action='store_true', help="continual baseline")
-    parser.add_argument("--n_epochs", type=int, default=2, help="Number of training epochs")
-    parser.add_argument("--num_workers", type=int, default=4, help="The number of workers")
-
-    parser.add_argument("--bottleneck_size", type=int, default=100)
-    parser.add_argument("--number_of_adpt", type=int, default=40, help="number of adapterss")
-    parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
-    parser.add_argument("--percentage_LAM0L", type=float, default=0.2, help="LAMOL percentage of augmented data used")
-    parser.add_argument("--reg", type=float, default=0.01, help="CL regularization term")
-    parser.add_argument("--episodic_mem_size", type=int, default=100, help="number of batch/sample put in the episodic memory")
-
-    parser.add_argument('--CL', type=str, default="MULTI")
-    parser.add_argument('--seed', default=42, type=int)
-
-
-    hyperparams = parser.parse_args()
-
-    
+    hyperparams = parse_train_opt()
     train(hyperparams)

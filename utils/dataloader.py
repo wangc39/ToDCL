@@ -197,87 +197,72 @@ def get_data_loaders(args, tokenizer, test=False):
     train_datasets = {}
     val_datasets = {}
     test_datasets = {}
+    all_train_loaders, all_valid_loaders = None, None
 
-    if(args.continual):
-        if(not test):
-            for task_id, dataset_task in datasets["train"].items():
-                trainMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_train", sample_dataset_radio=sample_dataset_radio)
-                train_loaders[task_id] = DataLoader(
-                    trainMSDatasets, 
-                    batch_size=args.train_batch_size, 
-                    collate_fn=trainMSDatasets.collate,
-                    num_workers=args.num_workers,
-                    shuffle=True)
-                train_datasets[task_id] = dataset_task
-            for task_id, dataset_task in datasets["dev"].items():
-                validMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_dev", sample_dataset_radio=sample_dataset_radio)
-                valid_loaders[task_id] = DataLoader(
-                    validMSDatasets, 
-                    batch_size=args.valid_batch_size,
-                    collate_fn=validMSDatasets.collate,
-                    num_workers=args.num_workers,
-                    shuffle=False)
-                val_datasets[task_id] = dataset_task
-        else:
-            for task_id, dataset_task in datasets["test"].items():
-                testMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"test", lm_labels=False, with_eos=False, sample_dataset_radio=sample_dataset_radio)
-                test_loaders[task_id] = DataLoader(
-                    testMSDatasets, 
-                    batch_size=args.test_batch_size, 
-                    collate_fn=testMSDatasets.collate,
-                    num_workers=args.num_workers,
-                    shuffle=True)
-                test_datasets[task_id] = dataset_task
-
-    elif(args.multi):
-        if(not test):
-            dataset_train = []
-            for task_id, dataset_task in datasets["train"].items():
-                dataset_train += dataset_task 
-            trainMSDatasets = MSDataset(dataset_train, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_train", sample_dataset_radio=sample_dataset_radio)
-            train_loaders = DataLoader(
+    if(not test):
+        # for train datasets
+        all_dataset_train = []
+        for task_id, dataset_task in datasets["train"].items():
+            all_dataset_train += dataset_task 
+            trainMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_train", sample_dataset_radio=sample_dataset_radio)
+            train_loaders[task_id] = DataLoader(
                 trainMSDatasets, 
                 batch_size=args.train_batch_size, 
                 collate_fn=trainMSDatasets.collate,
                 num_workers=args.num_workers,
                 shuffle=True)
+            train_datasets[task_id] = dataset_task
+        
+        allTrainMSDatasets = MSDataset(all_dataset_train, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_train", sample_dataset_radio=sample_dataset_radio)
+        all_train_loaders = DataLoader(
+            allTrainMSDatasets, 
+            batch_size=args.train_batch_size, 
+            collate_fn=allTrainMSDatasets.collate,
+            num_workers=args.num_workers,
+            shuffle=True)
 
-            dataset_dev = []
-            for task_id, dataset_task in datasets["dev"].items():
-                dataset_dev += dataset_task
-            validMSDatasets = MSDataset(dataset_dev, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_dev", sample_dataset_radio=sample_dataset_radio)
-            valid_loaders = DataLoader(
+        # for dev datasets
+        all_dataset_dev = []
+        for task_id, dataset_task in datasets["dev"].items():
+            all_dataset_dev += dataset_task
+            validMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"_dev", sample_dataset_radio=sample_dataset_radio)
+            valid_loaders[task_id] = DataLoader(
                 validMSDatasets, 
                 batch_size=args.valid_batch_size,
-                num_workers=args.num_workers,
                 collate_fn=validMSDatasets.collate,
-                shuffle=False)
-        else:
-            dataset_test = []
-            for task_id, dataset_task in datasets["test"].items():
-                dataset_test += dataset_task
-            testMSDatasets = MSDataset(dataset_test, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_test", \
-                                                 lm_labels=False, with_eos=False, sample_dataset_radio=sample_dataset_radio)
-            test_loaders = DataLoader(
-                testMSDatasets, 
-                batch_size=args.test_batch_size,
-                collate_fn=testMSDatasets.collate,
                 num_workers=args.num_workers,
                 shuffle=False)
-    # TODO: whether need to modify
-    # temp_list = []
+            val_datasets[task_id] = dataset_task
+        allValidMSDatasets = MSDataset(all_dataset_dev, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_dev", sample_dataset_radio=sample_dataset_radio)
+        all_valid_loaders = DataLoader(
+            allValidMSDatasets, 
+            batch_size=args.valid_batch_size,
+            num_workers=args.num_workers,
+            collate_fn=allValidMSDatasets.collate,
+            shuffle=False)
 
-    # for task_id, dataset_task in datasets["test"].items():
-    #     temp_list.append(dataset_task)
-    # test_datasets = sum(temp_list,[])
-    # testMSDatasets = MSDataset(test_datasets, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys()) + "_test", lm_labels=False, with_eos=False)
-    # test_loaders = DataLoader(
-    #     testMSDatasets, 
-    #     batch_size=args.test_batch_size, # test_batch_size = 1
-    #     collate_fn=testMSDatasets.collate, # unless to get padding result
-    #     num_workers=args.num_workers,
-    #     shuffle=False)
+    # for test datasets
+    all_dataset_test = []
+    for task_id, dataset_task in datasets["test"].items():
+        all_dataset_test += dataset_task
+        testMSDatasets = MSDataset(dataset_task, tokenizer, cur_task=task_id+"test", lm_labels=False, with_eos=False, sample_dataset_radio=sample_dataset_radio)
+        test_loaders[task_id] = DataLoader(
+            testMSDatasets, 
+            batch_size=args.test_batch_size, 
+            collate_fn=testMSDatasets.collate,
+            num_workers=args.num_workers,
+            shuffle=True)
+        test_datasets[task_id] = dataset_task
+
+    allTestMSDatasets = MSDataset(all_dataset_test, tokenizer, cur_task="_".join(aggregate['AllDatasets'].keys())+"_test", \
+                                            lm_labels=False, with_eos=False, sample_dataset_radio=sample_dataset_radio)
+    all_test_loaders = DataLoader(
+        allTestMSDatasets, 
+        batch_size=args.test_batch_size,
+        collate_fn=allTestMSDatasets.collate,
+        num_workers=args.num_workers,
+        shuffle=False)
+    
 
 
-
-    return train_loaders, valid_loaders, test_loaders, (train_datasets, val_datasets, test_datasets)
+    return train_loaders, valid_loaders, test_loaders, all_train_loaders, all_valid_loaders, all_test_loaders, (train_datasets, val_datasets, test_datasets)

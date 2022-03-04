@@ -22,8 +22,12 @@ import prettytable as pt
 from scorer import evaluate
 
 from utils.dataset_ms import SPECIAL_TOKENS
+from utils.opt import parse_test_opt
+from utils.utils import make_check_folder
 
 METRICS = ["BLEU4", "F1"]
+
+
 def _top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
@@ -210,7 +214,7 @@ def generate_sample_prev_task(args,model,tokenizer,dataset_dic,task_id_so_far,nu
         json.dump(temp_aug, fp, indent=4)
     return temp_aug
 
-def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path, task_id):
+def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path, task_id=-1):
     
     device = torch.device(f"cuda:0")
     model.to(device)
@@ -218,9 +222,11 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path
 
     gt_replys = []
     predictions = []
-    # results = []
 
-    for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader)):
+    test_task, train_task = gt_path.split("_")[-2], gt_path.split("_")[-4]
+    print("Train task {}\tTest task {}".format(train_task, test_task))
+    print("---"*30)
+    for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader), desc="train {}, test {}".format(train_task, test_task)):
         with torch.no_grad():
             input_ids, token_type_ids, labels, target_ids, taskname, indexes, attention_masks_2d, \
                                     kg_pad_ids, kg_memory_mask, kg_pad_kn_num = tuple(input_tensor for input_tensor in batch)
@@ -270,7 +276,9 @@ def convert_ids_to_outtext(tokenizer, candidate_responses):
     candidate_texts = []
     for response in candidate_responses:
         out_text = tokenizer.decode(response, skip_special_tokens=True)
-        out_text_pieces = out_text
+        if "\n" in out_text:
+            print("special tokens in {}".format(out_text))
+        out_text_pieces = out_text.replace("\n", "") # 去掉换行号
         # out_text_pieces = ' '.join(jieba.lcut(''.join(out_text.split())))
         candidate_texts.append(out_text_pieces)
     return candidate_texts
@@ -346,100 +354,83 @@ def test_model_seq2seq_ADAPTER(args,model,tokenizer,test_loader,test_dataset,sav
 
 
 
-def get_args():
-    parser = ArgumentParser()
-    # parser.add_argument('--model_checkpoint', type=str, default="gpt2")
-    parser.add_argument("--model_checkpoint", type=str, default="gpt2", help="Path to the folder with the results")
-    parser.add_argument("--saving_dir", type=str, default="result/", help="Path to the folder with the results")
+def parse_test_setting(args):
 
-
-    parser.add_argument("--train_batch_size", type=int, default=2, help="Batch size for training")
-    parser.add_argument("--valid_batch_size", type=int, default=2, help="Batch size for validation")
-    parser.add_argument("--test_batch_size", type=int, default=1, help="Batch size for test") # test dimension equal to 1
-    parser.add_argument("--responses_generate_times", type=int, default=5, help="The number of generated response")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Accumulate gradients on several steps")
-    parser.add_argument("--sample_dataset_radio", type=float, default=1.0, help="To sample the dataset for quick training")
-
-    parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
-    parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
-    parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
-    parser.add_argument("--setting", type=str, default="single", help="Path for saving")
-    parser.add_argument("--verbose", action='store_true', help="continual baseline")
-    parser.add_argument("--test_every_step", action='store_true', help="continual baseline")
-    parser.add_argument("--length", type=int, default=50, help="lenght of the generation")
-    parser.add_argument("--debug", action='store_true', help="continual baseline")
-    parser.add_argument("--n_epochs", type=int, default=5, help="Number of training epochs")
-    parser.add_argument("--num_workers", type=int, default=4, help="The number of workers")
-    parser.add_argument("--bottleneck_size", type=int, default=100)
-    parser.add_argument("--number_of_adpt", type=int, default=40, help="number of adapterss")
-    parser.add_argument("--lr", type=float, default=6.25e-5, help="Learning rate")
-    parser.add_argument("--percentage_LAM0L", type=float, default=0.2, help="LAMOL percentage of augmented data used")
-    parser.add_argument("--reg", type=float, default=0.01, help="CL regularization term")
-    parser.add_argument("--episodic_mem_size", type=int, default=100, help="number of batch/sample put in the episodic memory")
-    parser.add_argument('--CL', type=str, default="MULTI")
-
-    parser.add_argument('--seed', default=42, type=int)
-
-
-    hparams = parser.parse_args()
-
-    # if(hparams.CL == "ADAPTER"):
-    #     hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EPC_{hparams.n_epochs}_LR_{hparams.lr}_BOTL_{hparams.bottleneck_size}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
-    # else:
-    #     hparams.saving_dir = f"runs/{hparams.dataset_list}/{hparams.CL}_EM_{hparams.episodic_mem_size}_LAMOL_{hparams.percentage_LAM0L}_REG_{hparams.reg}_PERM_{hparams.seed}_{hparams.model_checkpoint}"
-    if(hparams.CL == "MULTI"): 
-        hparams.multi = True
-        hparams.continual = False
-    else: 
-        hparams.multi = False
-        hparams.continual = True
-
-
-    return hparams
-
-
-
-def test(args):
-    # pass
-
-    model = Seq2SeqToD(args)
-    # load dataloader
-    tokenizer = model.tokenizer
-
-    args.test_file_path = r"/data/wangcong/CL-dialogue/runs/Convai2,Ed,Wow,Daily,Cornell/"
-    folders = glob.glob(f"{args.test_file_path}/*") # 获取 model_checkpoint 的文件夹的名称
+    if(args.CL == "ADAPTER"):
+        args.load_model_base_file = f"/data/wangcong/CL-dialogue/runs/{args.dataset_list}"
+    else:
+        args.load_model_base_file = f"/data/wangcong/CL-dialogue/runs/{args.dataset_list}"
+    # 如果对数据集进行抽样的话
+    if(args.sample_dataset_radio != 1.0):
+        if(args.CL == "ADAPTER"):
+            args.load_model_base_file = f"/data/wangcong/CL-dialogue/runs_sample_{args.sample_dataset_radio}/{args.dataset_list}/"
+        else:
+            args.load_model_base_file = f"/data/wangcong/CL-dialogue/runs_sample_{args.sample_dataset_radio}/{args.dataset_list}"    
+   
+    # args.load_model_base_file = os.path.join(args.load_model_base_file, args.dataset_list)
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-    args.multi, args.continual = False, True
-    _, _, test_loader, (_, _, _) = get_data_loaders(args, tokenizer=tokenizer, test=True)
-    TASKS = list(test_loader.keys())
+    return args
 
+def test(args):
+    args = parse_test_setting(args)
+    model = Seq2SeqToD(args)
+
+    # load dataloader
+    _, _, test_loader, _, _, all_test_loaders, (_, _, _)  = get_data_loaders(args, model.tokenizer, test=True)
+    TASKS = args.dataset_list.split(",")
+
+    folders = glob.glob(f"{args.load_model_base_file}/*") # 获取 当前方法的名称
+    print("load_model_base_file: {}".format(args.load_model_base_file))
     print(folders)
     for folder in folders:
-        task_metrics_dict = {}
+        task_metrics_dict = defaultdict(lambda: defaultdict(dict))
         method_name = folder.split("/")[-1].split("_")[0] # get method name from folder path
-        print(f"dealing {method_name} result")
-        if method_name != "VANILLA": contniue
-        for cur_train_task_id, (cur_train_task, tasks) in enumerate(test_loader.items()):
+        print("test for method {}".format(method_name))
 
-            if method_name == "MULTI":
-                cur_train_task = "multi"
-            task_metrics_dict[cur_train_task_id] = {}
-            for cur_test_task_id, (cur_test_task) in enumerate(TASKS[:(cur_train_task_id+1)]):
-                print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
-                task_metrics_dict[cur_train_task_id][cur_test_task_id] = {}
-
+        # if method_name != "VANILLA": contniue
+        if method_name == "MULTI":
+            cur_train_task = "MULTI"
+            for cur_test_task_id, (cur_test_task, cur_test_task_loader) in enumerate(test_loader.items()):
+                print("cur train task: {}\t cur test task {}".format(cur_train_task, cur_test_task))
                 result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
                 gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
+                model_checkpoint = os.path.join(folder, "{}_{}".format(cur_test_task_id, cur_test_task))
+                # model.tokenizer.from_pretrained(model_checkpoint)
+                if not (os.path.exists(result_path) and os.path.exists(gt_path)) or args.remake_test_file: 
+                    print("loading model at {}".format(model_checkpoint))
+                    model.model.from_pretrained(os.path.join(model_checkpoint, "pytorch_model.bin"))
+                    # generate the txt file
+                    test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], result_path, gt_path)
 
-                bleu, f1_score = evaluate(result_path, gt_path, tokenizer, nltk_choose=False)
-                task_metrics_dict[cur_train_task_id][cur_test_task_id]["BLEU4"] = bleu
-                task_metrics_dict[cur_train_task_id][cur_test_task_id]["F1"] = f1_score
-        method_saving_dir = os.path.join(args.saving_dir, method_name)
-        if not os.path.exists(method_saving_dir):
-            os.mkdir(method_saving_dir)
-        table_file = os.path.join(method_saving_dir, "table_paper.txt")
+                task_metrics_dict[cur_train_task][cur_test_task][METRICS[0]], task_metrics_dict[cur_train_task][cur_test_task][METRICS[1]] = \
+                                evaluate(result_path, gt_path, model.tokenizer, nltk_choose=False)
+        else:
+            for cur_train_task_id, (cur_train_task, cur_train_task_loader) in enumerate(test_loader.items()):
+                for cur_test_task_id, (cur_test_task) in enumerate(TASKS[:(cur_train_task_id+1)]):
+                    print("Train Task: {}. Test Task: {}......".format(cur_train_task, cur_test_task))
+                    task_metrics_dict[cur_test_task_id][cur_train_task_id] = {}
+
+                    result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
+                    gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
+                    model_checkpoint = os.path.join(folder, "{}_{}".format(cur_train_task_id, cur_train_task))
+                    # model.tokenizer.from_pretrained(model_checkpoint)
+                    if not (os.path.exists(result_path) and os.path.exists(gt_path)) or args.remake_test_file:
+                        if cur_test_task_id == 0: # load model once
+                            print("loading model at {}".format(model_checkpoint))
+                            model.model.from_pretrained(model_checkpoint)
+                        # generate the txt file
+                        task_id = cur_train_task_id if (args.CL == "ADAPTER") else -1
+                        test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], result_path, gt_path, task_id=task_id)
+
+                    task_metrics_dict[cur_test_task][cur_train_task][METRICS[0]], task_metrics_dict[cur_test_task][cur_train_task][METRICS[1]] = \
+                                evaluate(result_path, gt_path, model.tokenizer, nltk_choose=False)
+
+        method_saving_dir = os.path.join(args.saving_dir, method_name) # folder
+        make_check_folder(method_saving_dir)
+
+        table_file = os.path.join(method_saving_dir, "{}.txt".format(method_name))
         print(f"table_file: {table_file}")
         show_table(task_metrics_dict, table_file, method_name, TASKS)
 
@@ -449,12 +440,12 @@ def test(args):
 
 def show_table(task_metrics_dict, table_file, method, TASKS):
     # method = res_dir.split('/')[-2]
-    save_dir = table_file.split('/')[-1]
+    # save_dir = table_file.split('/')[-1]
 
     f=open(table_file, 'a+')
     for metric in METRICS:
         tb = pt.PrettyTable()
-        tb.field_names = [method] + TASKS + ["avg"]
+        tb.field_names = [method] + TASKS + ["AVG"]
 
         train_last_test_all_values = []
         for cur_test_task_id, cur_test_task in enumerate(TASKS):
@@ -463,10 +454,12 @@ def show_table(task_metrics_dict, table_file, method, TASKS):
             train_all_test_first_values = []
             for cur_train_task_id, cur_train_task in enumerate(TASKS):
                 # value or "-"
-                if cur_test_task_id>=1 and cur_train_task_id <=1:
+                # if cur_test_task_id>=1 and cur_train_task_id <=1:
+                #     cur_row.append("-")
+                #     continue
+                if cur_test_task_id > cur_train_task_id:
                     cur_row.append("-")
                     continue
-
                 cur_value = task_metrics_dict[cur_test_task_id][cur_train_task_id][metric]
 
                 # for avg
@@ -489,7 +482,7 @@ def show_table(task_metrics_dict, table_file, method, TASKS):
         cur_row.append("-")
         tb.add_row(cur_row)
 
-        f.write("method: {}, save_dir: {}, metric: {}\n".format(method, save_dir, metric))
+        f.write("method: {}, metric: {}\n".format(method,  metric))
         f.write(str(tb))
         f.write("\n")
     f.write("\n")
@@ -577,7 +570,7 @@ def show_table(task_metrics_dict, table_file, method, TASKS):
     # test_all_file(args)
 
 if __name__ == "__main__":
-    args = get_args()
+    args = parse_test_opt()
     test(args)
     # task_metrics_dict = test(args)
     # table_file = os.path.join('/'.join(args.saving_dir.split("/")[:-2]), "table_paper.txt")
