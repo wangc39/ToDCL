@@ -66,11 +66,12 @@ def train(hparams, *args):
         hparams.continual = True
 
     # train!
+    seed_everything(hparams.seed)
+    
     model = Seq2SeqToD(hparams)
     train_loader, valid_loader, test_loader, all_train_loaders, all_valid_loaders, \
                     all_test_loaders, (train_datasets, val_datasets, test_datasets)  = get_data_loaders(hparams, model.tokenizer)
 
-    seed_everything(hparams.seed)
 
     # do not need
     # ## make the permutation 

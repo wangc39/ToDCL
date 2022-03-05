@@ -31,7 +31,8 @@ class Seq2SeqToD(pl.LightningModule):
                 model.add_adapters(bottleneck_size=args.bottleneck_size,adapter_num=args.number_of_adpt)
             else:
                 model = GPT2LMHeadModel.from_pretrained(args.model_checkpoint)
-            tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint, bos_token="[bos]", eos_token="[eos]", sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]')
+            tokenizer = GPT2Tokenizer.from_pretrained(args.model_checkpoint, bos_token="[bos]", eos_token="[eos]", \
+                                                        sos_token="[SOS]", sep_token="[sep]",pad_token='[PAD]', do_lower_case=True)
             # Add special tokens if they are not already added
             orig_num_tokens = len(tokenizer.encoder)
             num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN)  # returns 0 and doesn't add if they are already there

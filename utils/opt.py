@@ -21,7 +21,6 @@ def parse_test_opt():
     # parser.add_argument("--dataset_list", type=str, default="Ed,Wow,Daily", help="Path for saving")
     parser.add_argument("--dataset_list", type=str, default="Convai2,Ed,Wow,Daily,Cornell", help="Path for saving")
 
-    parser.add_argument("--max_history", type=int, default=5, help="max number of turns in the dialogue")
     parser.add_argument("--max_norm", type=float, default=1.0, help="Clipping gradient norm")
     parser.add_argument("--setting", type=str, default="single", help="Path for saving")
     parser.add_argument("--verbose", action='store_true', help="continual baseline")

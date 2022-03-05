@@ -11,6 +11,7 @@ from termcolor import colored
 from collections import defaultdict
 from data.preprocess_main import PreprocessMain
 
+
 def get_n_turns(data):
     # len_dialogue = []
     # len_dialogue.append(len([0 for dia in data for t in dia["utterances"]]))

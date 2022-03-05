@@ -13,6 +13,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from collections import defaultdict
 from argparse import ArgumentParser
+import numpy as np
 
 # from utils.dataloader import make_loader
 from utils.dataloader import get_data_loaders, get_current_task_data, make_loader
@@ -223,7 +224,7 @@ def test_model_seq2seq(args, model, tokenizer, test_loader, result_path, gt_path
     gt_replys = []
     predictions = []
 
-    test_task, train_task = gt_path.split("_")[-2], gt_path.split("_")[-4]
+    test_task, train_task = gt_path.split("_")[-4], gt_path.split("_")[-2]
     print("Train task {}\tTest task {}".format(train_task, test_task))
     print("---"*30)
     for idx_b, batch in tqdm(enumerate(test_loader),total=len(test_loader), desc="train {}, test {}".format(train_task, test_task)):
@@ -276,9 +277,10 @@ def convert_ids_to_outtext(tokenizer, candidate_responses):
     candidate_texts = []
     for response in candidate_responses:
         out_text = tokenizer.decode(response, skip_special_tokens=True)
+        # print("out_text: {}".format(out_text))
         if "\n" in out_text:
-            print("special tokens in {}".format(out_text))
-        out_text_pieces = out_text.replace("\n", "") # 去掉换行号
+            print("special Symbol in {}".format(out_text))
+        out_text_pieces = out_text.replace("\n", " ") # 去掉换行号
         # out_text_pieces = ' '.join(jieba.lcut(''.join(out_text.split())))
         candidate_texts.append(out_text_pieces)
     return candidate_texts
@@ -397,14 +399,14 @@ def test(args):
                 result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
                 gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
                 model_checkpoint = os.path.join(folder, "{}_{}".format(cur_test_task_id, cur_test_task))
-                # model.tokenizer.from_pretrained(model_checkpoint)
+                model.tokenizer.from_pretrained(model_checkpoint)
                 if not (os.path.exists(result_path) and os.path.exists(gt_path)) or args.remake_test_file: 
                     print("loading model at {}".format(model_checkpoint))
                     model.model.from_pretrained(os.path.join(model_checkpoint, "pytorch_model.bin"))
                     # generate the txt file
                     test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], result_path, gt_path)
 
-                task_metrics_dict[cur_train_task][cur_test_task][METRICS[0]], task_metrics_dict[cur_train_task][cur_test_task][METRICS[1]] = \
+                task_metrics_dict[cur_test_task_id][cur_train_task][METRICS[0]], task_metrics_dict[cur_test_task_id][cur_train_task][METRICS[1]] = \
                                 evaluate(result_path, gt_path, model.tokenizer, nltk_choose=False)
         else:
             for cur_train_task_id, (cur_train_task, cur_train_task_loader) in enumerate(test_loader.items()):
@@ -415,7 +417,7 @@ def test(args):
                     result_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_result.txt'
                     gt_path = f'{folder}/FINAL'+f'/multiSkill_test_{cur_test_task}_train_{cur_train_task}_gt.txt'
                     model_checkpoint = os.path.join(folder, "{}_{}".format(cur_train_task_id, cur_train_task))
-                    # model.tokenizer.from_pretrained(model_checkpoint)
+                    model.tokenizer.from_pretrained(model_checkpoint)
                     if not (os.path.exists(result_path) and os.path.exists(gt_path)) or args.remake_test_file:
                         if cur_test_task_id == 0: # load model once
                             print("loading model at {}".format(model_checkpoint))
@@ -424,7 +426,7 @@ def test(args):
                         task_id = cur_train_task_id if (args.CL == "ADAPTER") else -1
                         test_model_seq2seq(args, model.model, model.tokenizer, test_loader[cur_test_task], result_path, gt_path, task_id=task_id)
 
-                    task_metrics_dict[cur_test_task][cur_train_task][METRICS[0]], task_metrics_dict[cur_test_task][cur_train_task][METRICS[1]] = \
+                    task_metrics_dict[cur_test_task_id][cur_train_task_id][METRICS[0]], task_metrics_dict[cur_test_task_id][cur_train_task_id][METRICS[1]] = \
                                 evaluate(result_path, gt_path, model.tokenizer, nltk_choose=False)
 
         method_saving_dir = os.path.join(args.saving_dir, method_name) # folder
@@ -442,6 +444,7 @@ def show_table(task_metrics_dict, table_file, method, TASKS):
     # method = res_dir.split('/')[-2]
     # save_dir = table_file.split('/')[-1]
 
+    print(task_metrics_dict)
     f=open(table_file, 'a+')
     for metric in METRICS:
         tb = pt.PrettyTable()
@@ -460,6 +463,7 @@ def show_table(task_metrics_dict, table_file, method, TASKS):
                 if cur_test_task_id > cur_train_task_id:
                     cur_row.append("-")
                     continue
+                print(task_metrics_dict[cur_test_task_id][cur_train_task_id])
                 cur_value = task_metrics_dict[cur_test_task_id][cur_train_task_id][metric]
 
                 # for avg

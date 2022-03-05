@@ -64,13 +64,12 @@ def compute_bleu(hyp_text, ref_text):
     print('Calculating BLEU...')
 
     for i in range(len(hyp_text[0])):
-        
         # print(type(np.array(hyp_text_array[:, i])), np.array(hyp_text[:, i]).shape)
         hyp_text_column = [t[i]for t in hyp_text]
         BLEU = moses_multi_bleu(hyp_text_column, np.array(ref_text))
         BLEU_list.append(BLEU)
 
-    return np.mean(np.array(BLEU_list))
+    return round(np.mean(np.array(BLEU_list)), 3)
 
 def compute_f1(hyp_word_list, ref_word_list):
     f1_scorer = F1Metrics()
@@ -80,7 +79,7 @@ def compute_f1(hyp_word_list, ref_word_list):
     # task_metrics_dict[cur_test_task_id][cur_train_task_id]["F1-A"] = round(avg_f1*100, 2)
     # task_metrics_dict[cur_test_task_id][cur_train_task_id]["F1-M"] = round(max_f1*100, 2)
 
-    return round(avg_f1*100, 2)
+    return round(avg_f1*100, 3)
 
 
 def load_data(hyp_file_path, ref_file_path, tokenizer, nltk_choose=False):
